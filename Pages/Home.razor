@@ -1,0 +1,460 @@
+﻿@page "/"
+@using System.Net.Http.Json
+@using System.Threading.Tasks
+@using System.Text.Json
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+@using TimeSheet.Models
+
+<PageTitle>Home</PageTitle>
+
+<div class="app">
+    <header class="header">Time Sheet 2.0</header>
+
+    <div class="main">
+        <aside class="toolbar">
+            <nav>
+                <ul>
+                    <li><a href="url">Edit Categories</a></li>
+                    <li><a href="url">Edit Companies</a></li>
+                    <li><a href="url">Edit Projects</a></li>
+                    <li>
+                        <label for="start">Search Range:</label>
+                        <input id="start" type="date" @bind-value="start" @bind-value:after="GetEntries" />
+                        - <input id="end" type="date" @bind-value="end" @bind-value:after="GetEntries" />
+                    </li>
+                    <li>
+                        <label style="float:left" for="date">Day:</label>
+                        <input id="date" type="date" @bind="date" />
+                    </li>
+                    <li>
+                        <label style="float:left" for="time">Time:</label>
+                        <input id="time" type="time" @bind="time" />
+                    </li>
+                    <li>
+                        <label style="float:left" for="hrs">Enter Hours:</label>
+                        <input @ref="inputHours" id="hrs" type="number" min="0" max="24" step="0.25" @bind="hours" />
+                    </li>
+                    <li>
+                        <label for="cmt">Comment:</label>
+                        <textarea id="cmt" rows="2" @bind="comment" class="w-100"></textarea>
+                    </li>
+                    <li>
+                        <label for="category">Category:</label>
+                        <select id="category" @bind="selectedCategoryId" @onclick="GetEntries">
+                            <option value="0" selected>None</option>
+                            @foreach (var c in categories.Categories ?? new List<Category>())
+                            {
+                                <option value="@c.Id">@c.Code</option>
+                            }
+                        </select>
+                    </li>
+                    <li>
+                        <label for="company">Company:</label>
+                        <select id="company" @bind="selectedCompanyId" @onclick="GetEntries">
+                            <option value="0" selected>None</option>
+                            @foreach (var comp in companies.Companies ?? new List<Company>())
+                            {
+                                <option value="@comp.Id">@comp.Name</option>
+                            }
+                        </select>
+                    </li>
+                    <li>
+                        <label for="project">Project:</label>
+                        <select id="project" @bind="selectedProjectId" @onclick="GetEntries">
+                            <option value="0" selected>None</option>
+                            @foreach (var proj in projects.Projects ?? new List<Project>())
+                            {
+                                @if (selectedCompanyId == 0 || proj.CompanyId == null || proj.CompanyId == selectedCompanyId)
+                                {
+                                    <option value="@proj.Id">@proj.Name</option>
+                                }
+                            }
+                        </select>
+                    </li>
+                    <li>
+                        <label style="float:left; vertical-align:middle;" for="billable">Billable:</label>
+                        <input id="billable" type="checkbox" @bind="billable" @onclick="GetEntries" />
+                    </li>
+                    <li>
+                        <label for="details">Notes:</label>
+                        <textarea id="details" rows="4" @bind="details" class="w-100"></textarea>
+                    </li>
+                    <li><button @onclick="AddEntry">Add Entry</button> <button @onclick="GetReport">Download Report</button></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <section class="content">
+            <h3>Search Results</h3>
+            @if (SearchResults.Entries != null)
+            {
+                <table class="results_table" id="entries">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Date</th>
+                            <th>Start</th>
+                            <th>Minutes</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Company</th>
+                            <th>Project</th>
+                            @* <th>Notes</th> *@
+                            <th colspan="1">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in SearchResults.Entries)
+                        {
+                            <tr>
+                                <td>@entry.Id</td>
+                                <td>@entry.EntryDate</td>
+                                <td>@entry.StartTime</td>
+                                <td>@entry.DurationMinutes</td>
+                                <td class="small">@entry.Description</td>
+                                <td>@entry.CategoryCode</td>
+                                <td>@entry.CompanyName</td>
+                                <td>@entry.ProjectCode</td>
+                                @* <td class="small">@entry.Notes</td> *@
+                                <td><button @onclick="@(() => RemoveEntry(@entry.Id))">Remove</button></td>
+                            </tr>
+                        }
+                        @if (HoursPayResults != null)
+                        {
+                            <tr>
+                                <td colspan="100">Total Hours: @HoursPayResults.Hours for Pay: @HoursPayResults.Pay.ToString("C")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    </div>
+
+    <footer class="footer">
+        <label hidden="@hide_it">@label_text</label>
+    </footer>
+</div>
+
+@code {
+    private ElementReference inputHours;
+    private bool hide_it = true;
+    private string label_text = "Some Text";
+    private DateTime date = DateTime.Now.Date;
+    private DateTime start = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+    private DateTime end = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1).AddMonths(1).AddDays(-1);
+    private TimeOnly time = TimeOnly.FromDateTime(DateTime.Now.Date.AddHours(7));
+    private float hours = 0;
+    private bool billable = true;
+    private string comment = string.Empty;
+    // Multiline text bound to the textarea above
+    private string details = string.Empty;
+    private int entryIdToRemove = 0;
+    private string api_base = "http://10.0.0.192:8001/";
+    private string get_cats_endpont = "categories";
+    private string get_comp_endpont = "companies";
+    private string get_proj_endpont = "projects";
+    private string get_entries_endpoint = "getentries";
+    private string add_entry_endpoint = "addentry";
+    private string remove_entry_endpoint = "removeentry";
+    private string get_hours_pay_endpoint = "gethoursandpay";
+    private string api_url = "http://10.0.0.192:8001/addrow";
+    private CategoriesResponse categories = new CategoriesResponse();
+    private CompaniesResponse companies = new CompaniesResponse();
+    private ProjectsResponse projects = new ProjectsResponse();
+    private GetEntriesResponse SearchResults = new GetEntriesResponse();
+    private AddEntryResponse InsertResults = new AddEntryResponse();
+    private GetHoursAndPayResponse HoursPayResults = new GetHoursAndPayResponse();
+    // Selected category id from the <select>
+    private int? selectedCategoryId;
+    // Selected company id from the <select>
+    private int? selectedCompanyId;
+    // Selected project id from the <select>
+    private int? selectedProjectId;
+
+    // Set the code you want auto-selected here
+    private string autoSelectCategoryCode = "DEV";
+    private string autoSelectCompanyName = "Wasatch Photonics";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // execute conditionally for loading data, otherwise this will load
+        // every time the page refreshes
+        if (firstRender)
+        {
+            await GetCategories();
+            await GetCompanies();
+            await GetProjects();
+            await inputHours.FocusAsync();
+            await GetEntries();
+            StateHasChanged();
+        }
+    }
+
+    public async Task GetCategories()
+    {
+        var resp = await Http.GetAsync(api_base + get_cats_endpont);
+        if (resp.IsSuccessStatusCode)
+        {
+            categories = await resp.Content.ReadFromJsonAsync<CategoriesResponse>();
+
+            // Auto-select category by code (set autoSelectCategoryCode above)
+            selectedCategoryId = categories.Categories?
+                .FirstOrDefault(c => string.Equals(c.Code, autoSelectCategoryCode, StringComparison.OrdinalIgnoreCase))
+                ?.Id ?? 0;
+        }
+    }
+
+    public async Task GetCompanies()
+    {
+        var resp = await Http.GetAsync(api_base + get_comp_endpont);
+        if (resp.IsSuccessStatusCode)
+        {
+            companies = await resp.Content.ReadFromJsonAsync<CompaniesResponse>();
+
+            // Auto-select company by name (set autoSelectCompanyName above)
+            selectedCompanyId = companies.Companies?
+                .FirstOrDefault(c => string.Equals(c.Name, autoSelectCompanyName, StringComparison.OrdinalIgnoreCase))
+                ?.Id ?? 0;
+        }
+    }
+
+    public async Task GetProjects()
+    {
+        var resp = await Http.GetAsync(api_base + get_proj_endpont);
+        if (resp.IsSuccessStatusCode)
+        {
+            projects = await resp.Content.ReadFromJsonAsync<ProjectsResponse>();
+        }
+    }
+
+    public async Task GetEntries()
+    {
+
+        SearchParams searchParams = new SearchParams
+        {
+            Start = Uri.EscapeDataString(start.ToString("yyyy-MM-dd")),
+            End = Uri.EscapeDataString(end.ToString("yyyy-MM-dd")),
+            Company = selectedCompanyId != 0 ? selectedCompanyId : null,
+            Category = selectedCategoryId != 0 ? selectedCategoryId : null,
+            Project = selectedProjectId != 0 ? selectedProjectId : null
+        };
+
+        try
+        {
+            var queryParams = new List<string>
+            {
+                $"start={searchParams.Start}",
+                $"end={searchParams.End}"
+            };
+
+            if (searchParams.Company.HasValue)
+                queryParams.Add($"company_id={searchParams.Company.Value}");
+            if (searchParams.Category.HasValue)
+                queryParams.Add($"category_id={searchParams.Category.Value}");
+            if (searchParams.Project.HasValue)
+                queryParams.Add($"project_id={searchParams.Project.Value}");
+
+            var queryString = string.Join("&", queryParams);
+            var url = $"{api_base}{get_entries_endpoint}?{queryString}";
+
+            var resp = await Http.GetAsync(url);
+            var content = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                SearchResults = await resp.Content.ReadFromJsonAsync<GetEntriesResponse>();
+                label_text = $"Found {SearchResults.Entries?.Count ?? 0} entries.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {content}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error building query: {ex.Message}";
+            hide_it = false;
+            return;
+        }
+        hide_it = false;
+        await GetHoursAndPay();
+    }
+
+    private async Task GetHoursAndPay()
+    {
+        HoursPayResults = new GetHoursAndPayResponse(); // Clear previous results
+
+        SearchParams searchParams = new SearchParams
+        {
+            Start = Uri.EscapeDataString(start.ToString("yyyy-MM-dd")),
+            End = Uri.EscapeDataString(end.ToString("yyyy-MM-dd")),
+            Company = selectedCompanyId != 0 ? selectedCompanyId : null,
+            Category = selectedCategoryId != 0 ? selectedCategoryId : null,
+            Project = selectedProjectId != 0 ? selectedProjectId : null
+        };
+
+        if (!searchParams.Company.HasValue)
+        {
+            label_text = "Please select a company to view hours and pay.";
+            hide_it = false;
+            return;
+        }
+
+        try
+        {
+            var queryParams = new List<string>
+            {
+                $"start={searchParams.Start}",
+                $"end={searchParams.End}"
+            };
+
+            if (searchParams.Company.HasValue)
+                queryParams.Add($"company_id={searchParams.Company.Value}");
+            if (searchParams.Category.HasValue)
+                queryParams.Add($"category_id={searchParams.Category.Value}");
+            if (searchParams.Project.HasValue)
+                queryParams.Add($"project_id={searchParams.Project.Value}");
+
+            var queryString = string.Join("&", queryParams);
+            var url = $"{api_base}{get_hours_pay_endpoint}?{queryString}";
+
+            var resp = await Http.GetAsync(url);
+            var content = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                HoursPayResults = await resp.Content.ReadFromJsonAsync<GetHoursAndPayResponse>();
+                //label_text = $"Total Hours: {HoursPayResults.Hours}, Total Pay: {HoursPayResults.Pay:C}";
+                StateHasChanged();
+
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {content}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error building query: {ex.Message}";
+            hide_it = false;
+            return;
+        }
+    }
+
+    private async Task GetReport()
+    {
+        // Will use current search results to build a report file and trigger a download
+    }
+
+    private async Task AddEntry()
+    {
+        var entryParams = new InsertEntryParams
+        {
+            entry_date = date.ToString("yyyy-MM-dd"),
+            start_time = time.ToString("HH:mm"),
+            duration_minutes = (int)(hours * 60),
+            billable = billable ? 1 : 0,
+            description = comment,
+            category_id = selectedCategoryId != 0 ? selectedCategoryId : null,
+            company_id = selectedCompanyId != 0 ? selectedCompanyId : null,
+            project_id = selectedProjectId != 0 ? selectedProjectId : null,
+            notes = details
+        };
+
+        var json = JsonSerializer.Serialize(entryParams);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var resp = await Http.PostAsync(api_base + add_entry_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                InsertResults = JsonSerializer.Deserialize<AddEntryResponse>(respContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new AddEntryResponse();
+                label_text = $"Entry added with ID: {InsertResults.Inserted}";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {InsertResults.Error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error adding entry: {ex.Message}";
+        }
+
+        await GetEntries();
+        comment = string.Empty;
+        details = string.Empty;
+        hours = 0;
+    }
+
+    private async Task RemoveEntry(int rem_id = 0)
+    {
+        if (rem_id != 0)
+        {
+            entryIdToRemove = rem_id;
+        }
+
+        if (entryIdToRemove == 0)
+        {
+            label_text = "Please enter a valid entry ID to remove.";
+            hide_it = false;
+            return;
+        }
+
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete entry ID {entryIdToRemove}?");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var payload = new { id = entryIdToRemove };
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var resp = await Http.PostAsync(api_base + "removeentry", content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Entry with ID {entryIdToRemove} removed.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error removing entry: {ex.Message}";
+        }
+
+        await GetEntries();
+    }
+
+    public class SearchParams
+    {
+        public string Start { get; set; } = DateTime.Now.ToString("yyyy-MM-dd");
+        public string End { get; set; } = DateTime.Now.AddDays(7).ToString("yyyy-MM-dd");
+        public int? Company { get; set; }
+        public int? Category { get; set; }
+        public int? Project { get; set; }
+    }
+
+    public class InsertEntryParams
+    {
+        public string entry_date { get; set; } = DateTime.Now.ToString("yyyy-MM-dd");
+        public string start_time { get; set; } = DateTime.Now.ToString("HH:mm");
+        public int duration_minutes { get; set; } = 0;
+        public int billable { get; set; } = 1;
+        public string? description { get; set; }
+        public int? category_id { get; set; }
+        public int? company_id { get; set; }
+        public int? project_id { get; set; }
+        public string? notes { get; set; }
+    }
+
+}
