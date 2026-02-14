@@ -113,7 +113,7 @@
                     <tbody>
                         @foreach (var entry in SearchResults.Entries)
                         {
-                            <tr>
+                            <tr @onclick="@(() => OpenEditModal(entry))" style="cursor: pointer;">
                                 <td>@entry.Id</td>
                                 <td>@entry.EntryDate</td>
                                 <td>@entry.StartTime</td>
@@ -123,7 +123,7 @@
                                 <td>@entry.CompanyName</td>
                                 <td>@entry.ProjectCode</td>
                                 @* <td class="small">@entry.Notes</td> *@
-                                <td><button @onclick="@(() => RemoveEntry(@entry.Id))">Remove</button></td>
+                                <td><button @onclick="@(() => RemoveEntry(@entry.Id))" @onclick:stopPropagation="true">Remove</button></td>
                             </tr>
                         }
                         @if (HoursPayResults != null)
@@ -143,6 +143,75 @@
     </footer>
 </div>
 
+@if (showEditModal)
+{
+    <div class="modal-backdrop" @onclick="CloseEditModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>Edit Entry #@editingEntry.Id</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="edit-date">Day:</label>
+                    <input id="edit-date" type="date" @bind="editingEntry.EntryDate" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-time">Start Time:</label>
+                    <input id="edit-time" type="time" @bind="editingEntry.StartTime" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-minutes">Duration (minutes):</label>
+                    <input id="edit-minutes" type="number" @bind="editingEntry.DurationMinutes" min="0" step="15" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Description:</label>
+                    <textarea id="edit-description" rows="2" @bind="editingEntry.Description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-category">Category:</label>
+                    <select id="edit-category" @bind="editingEntry.CategoryId">
+                        <option value="0">None</option>
+                        @foreach (var c in categories.Categories ?? new List<Category>())
+                        {
+                            <option value="@c.Id">@c.Code</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-company">Company:</label>
+                    <select id="edit-company" @bind="editingEntry.CompanyId">
+                        <option value="0">None</option>
+                        @foreach (var comp in companies.Companies ?? new List<Company>())
+                        {
+                            <option value="@comp.Id">@comp.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-project">Project:</label>
+                    <select id="edit-project" @bind="editingEntry.ProjectId">
+                        <option value="0">None</option>
+                        @foreach (var proj in projects.Projects ?? new List<Project>())
+                        {
+                            <option value="@proj.Id">@proj.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-billable">Billable:</label>
+                    <input id="edit-billable" type="checkbox" @bind="editingEntry.Billable" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-notes">Notes:</label>
+                    <textarea id="edit-notes" rows="3" @bind="editingEntry.Notes"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @onclick="SaveEditedEntry">Save</button>
+                <button @onclick="CloseEditModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private ElementReference inputHours;
     private bool hide_it = true;
@@ -154,15 +223,19 @@
     private float hours = 0;
     private bool billable = true;
     private string comment = string.Empty;
-    // Multiline text bound to the textarea above
     private string details = string.Empty;
     private int entryIdToRemove = 0;
+    
+    private bool showEditModal = false;
+    private EditEntryModel editingEntry = new EditEntryModel();
+    
     private string api_base = "http://10.0.0.192:8001/";
     private string get_cats_endpont = "categories";
     private string get_comp_endpont = "companies";
     private string get_proj_endpont = "projects";
     private string get_entries_endpoint = "getentries";
     private string add_entry_endpoint = "addentry";
+    private string update_entry_endpoint = "updateentry";
     private string remove_entry_endpoint = "removeentry";
     private string get_hours_pay_endpoint = "gethoursandpay";
     private string api_url = "http://10.0.0.192:8001/addrow";
@@ -465,6 +538,48 @@
         hours = 0;
     }
 
+    private async Task UpdateEntry(int entryId, string entryDate, string startTime, int durationMinutes, 
+        int billableValue, string description, int? categoryId, int? companyId, int? projectId, string notes)
+    {
+        var updateParams = new UpdateEntryParams
+        {
+            id = entryId,
+            entry_date = entryDate,
+            start_time = startTime,
+            duration_minutes = durationMinutes,
+            billable = billableValue,
+            description = description,
+            category_id = categoryId,
+            company_id = companyId,
+            project_id = projectId,
+            notes = notes
+        };
+
+        var json = JsonSerializer.Serialize(updateParams);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var resp = await Http.PostAsync(api_base + update_entry_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Entry {entryId} updated successfully.";
+            }
+            else
+            {
+                label_text = $"Error updating entry: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error updating entry: {ex.Message}";
+        }
+
+        hide_it = false;
+        await GetEntries();
+    }
+
     private async Task RemoveEntry(int rem_id = 0)
     {
         if (rem_id != 0)
@@ -511,6 +626,46 @@
         await GetEntries();
     }
 
+    private void OpenEditModal(Entry entry)
+    {
+        editingEntry = new EditEntryModel
+        {
+            Id = entry.Id,
+            EntryDate = DateTime.Parse(entry.EntryDate),
+            StartTime = TimeOnly.Parse(entry.StartTime),
+            DurationMinutes = entry.DurationMinutes,
+            Description = entry.Description ?? string.Empty,
+            CategoryId = entry.CategoryId ?? 0,
+            CompanyId = entry.CompanyId ?? 0,
+            ProjectId = entry.ProjectId ?? 0,
+            Billable = entry.Billable == 1,
+            Notes = entry.Notes ?? string.Empty
+        };
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+    }
+
+    private async Task SaveEditedEntry()
+    {
+        await UpdateEntry(
+            editingEntry.Id,
+            editingEntry.EntryDate.ToString("yyyy-MM-dd"),
+            editingEntry.StartTime.ToString("HH:mm"),
+            editingEntry.DurationMinutes,
+            editingEntry.Billable ? 1 : 0,
+            editingEntry.Description,
+            editingEntry.CategoryId != 0 ? editingEntry.CategoryId : null,
+            editingEntry.CompanyId != 0 ? editingEntry.CompanyId : null,
+            editingEntry.ProjectId != 0 ? editingEntry.ProjectId : null,
+            editingEntry.Notes
+        );
+        CloseEditModal();
+    }
+
     public class SearchParams
     {
         public string Start { get; set; } = DateTime.Now.ToString("yyyy-MM-dd");
@@ -531,6 +686,34 @@
         public int? company_id { get; set; }
         public int? project_id { get; set; }
         public string? notes { get; set; }
+    }
+
+    public class UpdateEntryParams
+    {
+        public int id { get; set; }
+        public string entry_date { get; set; } = DateTime.Now.ToString("yyyy-MM-dd");
+        public string start_time { get; set; } = DateTime.Now.ToString("HH:mm");
+        public int duration_minutes { get; set; } = 0;
+        public int billable { get; set; } = 1;
+        public string? description { get; set; }
+        public int? category_id { get; set; }
+        public int? company_id { get; set; }
+        public int? project_id { get; set; }
+        public string? notes { get; set; }
+    }
+
+    public class EditEntryModel
+    {
+        public int Id { get; set; }
+        public DateTime EntryDate { get; set; }
+        public TimeOnly StartTime { get; set; }
+        public int DurationMinutes { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public int CategoryId { get; set; }
+        public int CompanyId { get; set; }
+        public int ProjectId { get; set; }
+        public bool Billable { get; set; }
+        public string Notes { get; set; } = string.Empty;
     }
 
 }

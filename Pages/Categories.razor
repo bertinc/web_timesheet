@@ -46,11 +46,11 @@
                     <tbody>
                         @foreach (var category in categories.Categories)
                         {
-                            <tr>
+                            <tr @onclick="@(() => OpenEditModal(category))" style="cursor: pointer;">
                                 <td>@category.Id</td>
                                 <td>@category.Code</td>
                                 <td class="small">@(string.IsNullOrEmpty(category.Description) ? "-" : category.Description)</td>
-                                <td><button @onclick="@(() => RemoveCategory(@category.Id))">Remove</button></td>
+                                <td><button @onclick="@(() => RemoveCategory(@category.Id))" @onclick:stopPropagation="true">Remove</button></td>
                             </tr>
                         }
                         <tr>
@@ -71,15 +71,39 @@
     </footer>
 </div>
 
+@if (showEditModal)
+{
+    <div class="modal-backdrop" @onclick="CloseEditModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>Edit Category #@editingCategory.Id</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="edit-code">Category Code:</label>
+                    <input id="edit-code" type="text" @bind="editingCategory.Code" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Description:</label>
+                    <textarea id="edit-description" rows="4" @bind="editingCategory.Description"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @onclick="SaveEditedCategory">Save</button>
+                <button @onclick="CloseEditModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool hide_it = true;
     private string label_text = "Some Text";
     private string api_base = "http://10.0.0.192:8001/";
     private string cats_endpoint = "categories";
-    //private string add_category_endpoint = "addcategory";
-    //private string remove_category_endpoint = "removecategory";
     private CategoriesResponse categories = new CategoriesResponse();
     private Category newCategory = new Category();
+    
+    private bool showEditModal = false;
+    private EditCategoryModel editingCategory = new EditCategoryModel();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -194,5 +218,83 @@
 
         await GetCategories();
         hide_it = false;
+    }
+
+    private async Task UpdateCategory(int categoryId, string code, string description)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            label_text = "Category Code is a required field.";
+            hide_it = false;
+            return;
+        }
+
+        var payload = new
+        {
+            category_id = categoryId,
+            code = code,
+            description = description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+
+        using var req = new HttpRequestMessage(HttpMethod.Put, api_base + cats_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Category '{code}' updated successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error updating category: {ex.Message}";
+        }
+
+        await GetCategories();
+        hide_it = false;
+    }
+
+    private void OpenEditModal(Category category)
+    {
+        editingCategory = new EditCategoryModel
+        {
+            Id = category.Id,
+            Code = category.Code ?? string.Empty,
+            Description = category.Description ?? string.Empty
+        };
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+    }
+
+    private async Task SaveEditedCategory()
+    {
+        await UpdateCategory(
+            editingCategory.Id,
+            editingCategory.Code,
+            editingCategory.Description
+        );
+        CloseEditModal();
+    }
+
+    public class EditCategoryModel
+    {
+        public int Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
     }
 }

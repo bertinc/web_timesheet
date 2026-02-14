@@ -51,12 +51,12 @@
                     <tbody>
                         @foreach (var company in companies.Companies)
                         {
-                            <tr>
+                            <tr @onclick="@(() => OpenEditModal(company))" style="cursor: pointer;">
                                 <td>@company.Id</td>
                                 <td>@company.Name</td>
                                 <td>@(company.PayRate.HasValue ? company.PayRate.Value.ToString("C") : "-")</td>
                                 <td class="small">@(string.IsNullOrEmpty(company.Description) ? "-" : company.Description)</td>
-                                <td><button @onclick="@(() => RemoveCompany(@company.Id))">Remove</button></td>
+                                <td><button @onclick="@(() => RemoveCompany(@company.Id))" @onclick:stopPropagation="true">Remove</button></td>
                             </tr>
                         }
                         <tr>
@@ -77,15 +77,43 @@
     </footer>
 </div>
 
+@if (showEditModal)
+{
+    <div class="modal-backdrop" @onclick="CloseEditModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>Edit Company #@editingCompany.Id</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="edit-name">Company Name:</label>
+                    <input id="edit-name" type="text" @bind="editingCompany.Name" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-payrate">Pay Rate:</label>
+                    <input id="edit-payrate" type="number" @bind="editingCompany.PayRate" step="1.00" min="0" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Description:</label>
+                    <textarea id="edit-description" rows="4" @bind="editingCompany.Description"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @onclick="SaveEditedCompany">Save</button>
+                <button @onclick="CloseEditModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool hide_it = true;
     private string label_text = "Some Text";
     private string api_base = "http://10.0.0.192:8001/";
     private string comp_endpoint = "companies";
-    //private string add_company_endpoint = "addcompany";
-    //private string remove_company_endpoint = "removecompany";
     private CompaniesResponse companies = new CompaniesResponse();
     private Company newCompany = new Company();
+    
+    private bool showEditModal = false;
+    private EditCompanyModel editingCompany = new EditCompanyModel();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -201,5 +229,87 @@
 
         await GetCompanies();
         hide_it = false;
+    }
+
+    private async Task UpdateCompany(int companyId, string name, decimal? payRate, string description)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            label_text = "Company Name is a required field.";
+            hide_it = false;
+            return;
+        }
+
+        var payload = new
+        {
+            company_id = companyId,
+            name = name,
+            pay_rate = payRate,
+            description = description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+
+        using var req = new HttpRequestMessage(HttpMethod.Put, api_base + comp_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Company '{name}' updated successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error updating company: {ex.Message}";
+        }
+
+        await GetCompanies();
+        hide_it = false;
+    }
+
+    private void OpenEditModal(Company company)
+    {
+        editingCompany = new EditCompanyModel
+        {
+            Id = company.Id,
+            Name = company.Name ?? string.Empty,
+            PayRate = company.PayRate,
+            Description = company.Description ?? string.Empty
+        };
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+    }
+
+    private async Task SaveEditedCompany()
+    {
+        await UpdateCompany(
+            editingCompany.Id,
+            editingCompany.Name,
+            editingCompany.PayRate,
+            editingCompany.Description
+        );
+        CloseEditModal();
+    }
+
+    public class EditCompanyModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public decimal? PayRate { get; set; }
+        public string Description { get; set; } = string.Empty;
     }
 }

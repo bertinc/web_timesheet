@@ -71,14 +71,14 @@
                     <tbody>
                         @foreach (var project in projects.Projects)
                         {
-                            <tr>
+                            <tr @onclick="@(() => OpenEditModal(project))" style="cursor: pointer;">
                                 <td>@project.Id</td>
                                 <td>@project.Code</td>
                                 <td>@project.Name</td>
                                 <td>@(string.IsNullOrEmpty(project.DueDate) ? "-" : project.DueDate)</td>
                                 <td>@(string.IsNullOrEmpty(project.CompanyName) ? "-" : project.CompanyName)</td>
                                 <td class="small">@(string.IsNullOrEmpty(project.Description) ? "-" : project.Description)</td>
-                                <td><button @onclick="@(() => RemoveProject(@project.Id))">Remove</button></td>
+                                <td><button @onclick="@(() => RemoveProject(@project.Id))" @onclick:stopPropagation="true">Remove</button></td>
                             </tr>
                         }
                         <tr>
@@ -99,18 +99,64 @@
     </footer>
 </div>
 
+@if (showEditModal)
+{
+    <div class="modal-backdrop" @onclick="CloseEditModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>Edit Project #@editingProject.Id</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="edit-code">Project Code:</label>
+                    <input id="edit-code" type="text" @bind="editingProject.Code" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-name">Project Name:</label>
+                    <input id="edit-name" type="text" @bind="editingProject.Name" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-duedate">Due Date:</label>
+                    <input id="edit-duedate" type="date" @bind="editingProject.DueDate" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-blankdate">No Due Date:</label>
+                    <input id="edit-blankdate" type="checkbox" @bind="editingProject.NoDueDate" />
+                </div>
+                <div class="form-group">
+                    <label for="edit-company">Company:</label>
+                    <select id="edit-company" @bind="editingProject.CompanyId">
+                        <option value="">None</option>
+                        @foreach (var comp in companies.Companies ?? new List<Company>())
+                        {
+                            <option value="@comp.Id">@comp.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Description:</label>
+                    <textarea id="edit-description" rows="4" @bind="editingProject.Description"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @onclick="SaveEditedProject">Save</button>
+                <button @onclick="CloseEditModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool hide_it = true;
     private string label_text = "Some Text";
     private string api_base = "http://10.0.0.192:8001/";
     private string proj_endpoint = "projects";
-    //private string add_project_endpoint = "addproject";
-    //private string remove_project_endpoint = "removeproject";
     private ProjectsResponse projects = new ProjectsResponse();
     private CompaniesResponse companies = new CompaniesResponse();
     private DateTime dueDate = DateTime.Today;
     private Project newProject = new Project();
     private bool blankDate = true;
+    
+    private bool showEditModal = false;
+    private EditProjectModel editingProject = new EditProjectModel();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -201,6 +247,54 @@
         hide_it = false;
     }
 
+    private async Task UpdateProject(int projectId, string code, string name, string dueDate, int? companyId, string description)
+    {
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+        {
+            label_text = "Code and Name are required fields.";
+            hide_it = false;
+            return;
+        }
+
+        var payload = new
+        {
+            project_id = projectId,
+            code = code,
+            name = name,
+            due_date = dueDate,
+            company_id = companyId,
+            description = description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+
+        using var req = new HttpRequestMessage(HttpMethod.Put, api_base + proj_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Project '{name}' updated successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error updating project: {ex.Message}";
+        }
+
+        await GetProjects();
+        hide_it = false;
+    }
+
     private async Task RemoveProject(int projectId)
     {
         var project = projects.Projects?.FirstOrDefault(p => p.Id == projectId);
@@ -249,5 +343,114 @@
 
         await GetProjects();
         hide_it = false;
+    }
+
+    private void EditProject(Project project)
+    {
+        editingProject = new EditProjectModel
+        {
+            Id = project.Id,
+            Code = project.Code,
+            Name = project.Name,
+            DueDate = DateTime.Parse(project.DueDate),
+            CompanyId = project.CompanyId,
+            Description = project.Description
+        };
+        showEditModal = true;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editingProject.Id <= 0)
+        {
+            label_text = "Invalid project ID.";
+            hide_it = false;
+            return;
+        }
+
+        var payload = new
+        {
+            project_id = editingProject.Id,
+            code = editingProject.Code,
+            name = editingProject.Name,
+            due_date = editingProject.DueDate.ToString("yyyy-MM-dd"),
+            company_id = editingProject.CompanyId,
+            description = editingProject.Description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+
+        using var req = new HttpRequestMessage(HttpMethod.Put, api_base + proj_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Project '{editingProject.Name}' updated successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error updating project: {ex.Message}";
+        }
+
+        showEditModal = false;
+        await GetProjects();
+        hide_it = false;
+    }
+
+    private void OpenEditModal(Project project)
+    {
+        editingProject = new EditProjectModel
+        {
+            Id = project.Id,
+            Code = project.Code ?? string.Empty,
+            Name = project.Name ?? string.Empty,
+            DueDate = string.IsNullOrEmpty(project.DueDate) ? DateTime.Today : DateTime.Parse(project.DueDate),
+            NoDueDate = string.IsNullOrEmpty(project.DueDate),
+            CompanyId = project.CompanyId,
+            Description = project.Description ?? string.Empty
+        };
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+    }
+
+    private async Task SaveEditedProject()
+    {
+        string dueDateStr = editingProject.NoDueDate ? null : editingProject.DueDate.ToString("yyyy-MM-dd");
+        
+        await UpdateProject(
+            editingProject.Id,
+            editingProject.Code,
+            editingProject.Name,
+            dueDateStr,
+            editingProject.CompanyId,
+            editingProject.Description
+        );
+        CloseEditModal();
+    }
+
+    public class EditProjectModel
+    {
+        public int Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public DateTime DueDate { get; set; }
+        public bool NoDueDate { get; set; }
+        public int? CompanyId { get; set; }
+        public string Description { get; set; } = string.Empty;
     }
 }
