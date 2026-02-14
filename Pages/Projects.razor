@@ -1,0 +1,253 @@
+@page "/projects"
+@using System.Net.Http.Json
+@using System.Threading.Tasks
+@using System.Text.Json
+@using System.Text;
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+@using TimeSheet.Models
+
+<PageTitle>Projects</PageTitle>
+
+<div class="app">
+    <header class="header">Manage Projects</header>
+
+    <div class="main">
+        <aside class="toolbar">
+            <nav>
+                <ul>
+                    <li><a href="/">Back to Home</a></li>
+                    <li>
+                        <label for="code">Project Code:</label>
+                        <input id="code" type="text" @bind="newProject.Code" placeholder="e.g., PROJ001" />
+                    </li>
+                    <li>
+                        <label for="name">Project Name:</label>
+                        <input id="name" type="text" @bind="newProject.Name" placeholder="e.g., Website Redesign" />
+                    </li>
+                    <li>
+                        <label for="duedate">Due Date:</label>
+                        <input id="duedate" type="date" @bind="dueDate" />
+                    </li>
+                    <li>
+                        <label style="float:left" for="blankdate">No Due Date:</label>
+                        <input id="blankdate" type="checkbox" @bind="blankDate" />
+                    </li>
+                    <li>
+                        <label for="company">Company:</label>
+                        <select id="company" @bind="newProject.CompanyId">
+                            <option value="">Select a Company</option>
+                            @foreach (var comp in companies.Companies ?? new List<Company>())
+                            {
+                                <option value="@comp.Id">@comp.Name</option>
+                            }
+                        </select>
+                    </li>
+                    <li>
+                        <label for="description">Description:</label>
+                        <textarea id="description" rows="4" @bind="newProject.Description" class="w-100" placeholder="Project description"></textarea>
+                    </li>
+                    <li><button @onclick="AddProject">Add Project</button></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <section class="content">
+            <h3>Existing Projects</h3>
+            @if (projects.Projects != null && projects.Projects.Count > 0)
+            {
+                <table class="results_table" id="projects">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Due Date</th>
+                            <th>Company</th>
+                            <th>Description</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var project in projects.Projects)
+                        {
+                            <tr>
+                                <td>@project.Id</td>
+                                <td>@project.Code</td>
+                                <td>@project.Name</td>
+                                <td>@(string.IsNullOrEmpty(project.DueDate) ? "-" : project.DueDate)</td>
+                                <td>@(string.IsNullOrEmpty(project.CompanyName) ? "-" : project.CompanyName)</td>
+                                <td class="small">@(string.IsNullOrEmpty(project.Description) ? "-" : project.Description)</td>
+                                <td><button @onclick="@(() => RemoveProject(@project.Id))">Remove</button></td>
+                            </tr>
+                        }
+                        <tr>
+                            <td colspan="100">Found @projects.Count projects</td>
+                        </tr>
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p>No projects found.</p>
+            }
+        </section>
+    </div>
+
+    <footer class="footer">
+        <label hidden="@hide_it">@label_text</label>
+    </footer>
+</div>
+
+@code {
+    private bool hide_it = true;
+    private string label_text = "Some Text";
+    private string api_base = "http://10.0.0.192:8001/";
+    private string proj_endpoint = "projects";
+    //private string add_project_endpoint = "addproject";
+    //private string remove_project_endpoint = "removeproject";
+    private ProjectsResponse projects = new ProjectsResponse();
+    private CompaniesResponse companies = new CompaniesResponse();
+    private DateTime dueDate = DateTime.Today;
+    private Project newProject = new Project();
+    private bool blankDate = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await GetCompanies();
+            await GetProjects();
+            StateHasChanged();
+        }
+    }
+
+    public async Task GetCompanies()
+    {
+        var resp = await Http.GetAsync(api_base + "companies");
+        if (resp.IsSuccessStatusCode)
+        {
+            companies = await resp.Content.ReadFromJsonAsync<CompaniesResponse>();
+        }
+    }
+
+    public async Task GetProjects()
+    {
+        var resp = await Http.GetAsync(api_base + proj_endpoint);
+        if (resp.IsSuccessStatusCode)
+        {
+            projects = await resp.Content.ReadFromJsonAsync<ProjectsResponse>();
+            label_text = $"Loaded {projects.Projects?.Count ?? 0} projects.";
+        }
+        else
+        {
+            label_text = $"Error loading projects: {resp.StatusCode}";
+        }
+        hide_it = false;
+    }
+
+    private async Task AddProject()
+    {
+        if (string.IsNullOrWhiteSpace(newProject.Code) || string.IsNullOrWhiteSpace(newProject.Name))
+        {
+            label_text = "Code and Name are required fields.";
+            hide_it = false;
+            return;
+        }
+
+        if (newProject.CompanyId.HasValue && newProject.CompanyId > 0)
+        {
+            var selectedCompany = companies.Companies?.FirstOrDefault(c => c.Id == newProject.CompanyId);
+            if (selectedCompany != null)
+            {
+                newProject.CompanyName = selectedCompany.Name;
+            }
+        }
+
+        newProject.DueDate = dueDate.ToString("yyyy-MM-dd");
+
+        var payload = new
+        {
+            code = newProject.Code,
+            name = newProject.Name,
+            due_date = blankDate ? null : newProject.DueDate,
+            company_id = newProject.CompanyId,
+            description = newProject.Description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var resp = await Http.PostAsync(api_base + proj_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Project '{newProject.Name}' added successfully.";
+                newProject = new Project();
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error adding project: {ex.Message}";
+        }
+
+        await GetProjects();
+        hide_it = false;
+    }
+
+    private async Task RemoveProject(int projectId)
+    {
+        var project = projects.Projects?.FirstOrDefault(p => p.Id == projectId);
+        if (project == null)
+        {
+            label_text = "Project not found.";
+            hide_it = false;
+            return;
+        }
+
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete project '{project.Name}'?");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var payload = new { project_id = projectId };
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        using var req = new HttpRequestMessage(HttpMethod.Delete, proj_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req); //.ConfigureAwait(false);
+            //var respContent = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            //var resp = await Http.PostAsync(api_base + proj_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Project '{project.Name}' removed successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error removing project: {ex.Message}";
+        }
+
+        await GetProjects();
+        hide_it = false;
+    }
+}

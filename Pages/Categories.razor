@@ -1,0 +1,198 @@
+@page "/categories"
+@using System.Net.Http.Json
+@using System.Threading.Tasks
+@using System.Text.Json
+@using System.Text;
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+@using TimeSheet.Models
+
+<PageTitle>Categories</PageTitle>
+
+<div class="app">
+    <header class="header">Manage Categories</header>
+
+    <div class="main">
+        <aside class="toolbar">
+            <nav>
+                <ul>
+                    <li><a href="/">Back to Home</a></li>
+                    <li>
+                        <label for="code">Category Code:</label>
+                        <input id="code" type="text" @bind="newCategory.Code" placeholder="e.g., DEV" />
+                    </li>
+                    <li>
+                        <label for="description">Description:</label>
+                        <textarea id="description" rows="4" @bind="newCategory.Description" class="w-100" placeholder="Category description"></textarea>
+                    </li>
+                    <li><button @onclick="AddCategory">Add Category</button></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <section class="content">
+            <h3>Existing Categories</h3>
+            @if (categories.Categories != null && categories.Categories.Count > 0)
+            {
+                <table class="results_table" id="categories">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Code</th>
+                            <th>Description</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var category in categories.Categories)
+                        {
+                            <tr>
+                                <td>@category.Id</td>
+                                <td>@category.Code</td>
+                                <td class="small">@(string.IsNullOrEmpty(category.Description) ? "-" : category.Description)</td>
+                                <td><button @onclick="@(() => RemoveCategory(@category.Id))">Remove</button></td>
+                            </tr>
+                        }
+                        <tr>
+                            <td colspan="100">Found @categories.Count categories</td>
+                        </tr>
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p>No categories found.</p>
+            }
+        </section>
+    </div>
+
+    <footer class="footer">
+        <label hidden="@hide_it">@label_text</label>
+    </footer>
+</div>
+
+@code {
+    private bool hide_it = true;
+    private string label_text = "Some Text";
+    private string api_base = "http://10.0.0.192:8001/";
+    private string cats_endpoint = "categories";
+    //private string add_category_endpoint = "addcategory";
+    //private string remove_category_endpoint = "removecategory";
+    private CategoriesResponse categories = new CategoriesResponse();
+    private Category newCategory = new Category();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await GetCategories();
+            StateHasChanged();
+        }
+    }
+
+    public async Task GetCategories()
+    {
+        var resp = await Http.GetAsync(api_base + cats_endpoint);
+        if (resp.IsSuccessStatusCode)
+        {
+            categories = await resp.Content.ReadFromJsonAsync<CategoriesResponse>();
+            label_text = $"Loaded {categories.Categories?.Count ?? 0} categories.";
+        }
+        else
+        {
+            label_text = $"Error loading categories: {resp.StatusCode}";
+        }
+        hide_it = false;
+    }
+
+    private async Task AddCategory()
+    {
+        if (string.IsNullOrWhiteSpace(newCategory.Code))
+        {
+            label_text = "Category Code is a required field.";
+            hide_it = false;
+            return;
+        }
+
+        var payload = new
+        {
+            code = newCategory.Code,
+            description = newCategory.Description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var resp = await Http.PostAsync(api_base + cats_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Category '{newCategory.Code}' added successfully.";
+                newCategory = new Category();
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error adding category: {ex.Message}";
+        }
+
+        await GetCategories();
+        hide_it = false;
+    }
+
+    private async Task RemoveCategory(int categoryId)
+    {
+        var category = categories.Categories?.FirstOrDefault(c => c.Id == categoryId);
+        if (category == null)
+        {
+            label_text = "Category not found.";
+            hide_it = false;
+            return;
+        }
+
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete category '{category.Code}'?");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var payload = new { category_id = categoryId };
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        using var req = new HttpRequestMessage(HttpMethod.Delete, cats_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req); //.ConfigureAwait(false);
+            //var respContent = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            //var resp = await Http.PostAsync(api_base + proj_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Category '{category.Code}' removed successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error removing category: {ex.Message}";
+        }
+
+        await GetCategories();
+        hide_it = false;
+    }
+}

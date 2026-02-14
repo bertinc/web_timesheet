@@ -1,0 +1,205 @@
+@page "/companies"
+@using System.Net.Http.Json
+@using System.Threading.Tasks
+@using System.Text.Json
+@using System.Text;
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+@using TimeSheet.Models
+
+<PageTitle>Companies</PageTitle>
+
+<div class="app">
+    <header class="header">Manage Companies</header>
+
+    <div class="main">
+        <aside class="toolbar">
+            <nav>
+                <ul>
+                    <li><a href="/">Back to Home</a></li>
+                    <li>
+                        <label for="name">Company Name:</label>
+                        <input id="name" type="text" @bind="newCompany.Name" placeholder="e.g., Wasatch Photonics" />
+                    </li>
+                    <li>
+                        <label for="payrate">Pay Rate:</label>
+                        <input id="payrate" type="number" @bind="newCompany.PayRate" placeholder="e.g., 50.00" step="1.00" min="0" />
+                    </li>
+                    <li>
+                        <label for="description">Description:</label>
+                        <textarea id="description" rows="4" @bind="newCompany.Description" class="w-100" placeholder="Company description"></textarea>
+                    </li>
+                    <li><button @onclick="AddCompany">Add Company</button></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <section class="content">
+            <h3>Existing Companies</h3>
+            @if (companies.Companies != null && companies.Companies.Count > 0)
+            {
+                <table class="results_table" id="companies">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Pay Rate</th>
+                            <th>Description</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var company in companies.Companies)
+                        {
+                            <tr>
+                                <td>@company.Id</td>
+                                <td>@company.Name</td>
+                                <td>@(company.PayRate.HasValue ? company.PayRate.Value.ToString("C") : "-")</td>
+                                <td class="small">@(string.IsNullOrEmpty(company.Description) ? "-" : company.Description)</td>
+                                <td><button @onclick="@(() => RemoveCompany(@company.Id))">Remove</button></td>
+                            </tr>
+                        }
+                        <tr>
+                            <td colspan="100">Found @companies.Count companies</td>
+                        </tr>
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p>No companies found.</p>
+            }
+        </section>
+    </div>
+
+    <footer class="footer">
+        <label hidden="@hide_it">@label_text</label>
+    </footer>
+</div>
+
+@code {
+    private bool hide_it = true;
+    private string label_text = "Some Text";
+    private string api_base = "http://10.0.0.192:8001/";
+    private string comp_endpoint = "companies";
+    //private string add_company_endpoint = "addcompany";
+    //private string remove_company_endpoint = "removecompany";
+    private CompaniesResponse companies = new CompaniesResponse();
+    private Company newCompany = new Company();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await GetCompanies();
+            StateHasChanged();
+        }
+    }
+
+    public async Task GetCompanies()
+    {
+        var resp = await Http.GetAsync(api_base + comp_endpoint);
+        if (resp.IsSuccessStatusCode)
+        {
+            companies = await resp.Content.ReadFromJsonAsync<CompaniesResponse>();
+            label_text = $"Loaded {companies.Companies?.Count ?? 0} companies.";
+        }
+        else
+        {
+            label_text = $"Error loading companies: {resp.StatusCode}";
+        }
+        hide_it = false;
+    }
+
+    private async Task AddCompany()
+    {
+        if (string.IsNullOrWhiteSpace(newCompany.Name))
+        {
+            label_text = "Company Name is a required field.";
+            hide_it = false;
+            return;
+        }
+
+        var payload = new
+        {
+            name = newCompany.Name,
+            pay_rate = newCompany.PayRate,
+            description = newCompany.Description
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var resp = await Http.PostAsync(api_base + comp_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Company '{newCompany.Name}' added successfully.";
+                newCompany = new Company();
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error adding company: {ex.Message}";
+        }
+
+        await GetCompanies();
+        hide_it = false;
+    }
+
+    private async Task RemoveCompany(int companyId)
+    {
+        var company = companies.Companies?.FirstOrDefault(c => c.Id == companyId);
+        if (company == null)
+        {
+            label_text = "Company not found.";
+            hide_it = false;
+            return;
+        }
+
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete company '{company.Name}'?");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var payload = new { company_id = companyId };
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        using var req = new HttpRequestMessage(HttpMethod.Delete, comp_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req); //.ConfigureAwait(false);
+            //var respContent = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            //var resp = await Http.PostAsync(api_base + proj_endpoint, content);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Company '{company.Name}' removed successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error removing company: {ex.Message}";
+        }
+
+        await GetCompanies();
+        hide_it = false;
+    }
+}

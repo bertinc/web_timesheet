@@ -15,9 +15,9 @@
         <aside class="toolbar">
             <nav>
                 <ul>
-                    <li><a href="url">Edit Categories</a></li>
-                    <li><a href="url">Edit Companies</a></li>
-                    <li><a href="url">Edit Projects</a></li>
+                    <li><a href="/categories">Edit Categories</a></li>
+                    <li><a href="/companies">Edit Companies</a></li>
+                    <li><a href="/projects">Edit Projects</a></li>
                     <li>
                         <label for="start">Search Range:</label>
                         <input id="start" type="date" @bind-value="start" @bind-value:after="GetEntries" />
@@ -81,6 +81,12 @@
                         <textarea id="details" rows="4" @bind="details" class="w-100"></textarea>
                     </li>
                     <li><button @onclick="AddEntry">Add Entry</button> <button @onclick="GetReport">Download Report</button></li>
+                    <li>
+                        Report @DateTime.Now.AddMonths(-1).ToString("MMM") hours by @GetFirstTuesday(DateTime.Now).ToString("MMM dd")
+                    </li>
+                    <li>
+                        Report @DateTime.Now.ToString("MMM") hours by @GetFirstTuesday(DateTime.Now.AddMonths(1)).ToString("MMM dd")
+                    </li>
                 </ul>
             </nav>
         </aside>
@@ -343,7 +349,77 @@
 
     private async Task GetReport()
     {
-        // Will use current search results to build a report file and trigger a download
+        if (SearchResults.Entries == null || SearchResults.Entries.Count == 0)
+        {
+            label_text = "No entries to download.";
+            hide_it = false;
+            return;
+        }
+
+        try
+        {
+            var csv = GenerateCsv(SearchResults.Entries, HoursPayResults);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+            
+            await JsRuntime.InvokeVoidAsync("downloadFile", 
+                Convert.ToBase64String(bytes), 
+                "text/csv", 
+                $"timesheet_{DateTime.Now:yyyy-MM-dd_HHmmss}.csv");
+            
+            label_text = "Report downloaded successfully.";
+            hide_it = false;
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error generating report: {ex.Message}";
+            hide_it = false;
+        }
+    }
+
+    private string GenerateCsv(List<Entry> entries, GetHoursAndPayResponse hoursPayResults)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        sb.AppendLine("Date,Start,Minutes,Description,Category,Project");
+        
+        foreach (var entry in entries)
+        {
+            var description = EscapeCsvField(entry.Description);
+            var category = EscapeCsvField(entry.CategoryCode);
+            var project = EscapeCsvField(entry.ProjectCode);
+            
+            sb.AppendLine($"{entry.EntryDate},{entry.StartTime},{entry.DurationMinutes},{description},{category},{project}");
+        }
+        
+        sb.AppendLine();
+        
+        if (hoursPayResults != null)
+        {
+            sb.AppendLine($"Total Hours,{hoursPayResults.Hours}");
+        }
+        
+        return sb.ToString();
+    }
+
+    private string EscapeCsvField(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "\"\"";
+        
+        // Always quote fields and escape internal quotes by doubling them
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
+    private DateTime GetFirstTuesday(DateTime dateInMonth)
+    {
+        var firstOfMonth = new DateTime(dateInMonth.Year, dateInMonth.Month, 1);
+        
+        while (firstOfMonth.DayOfWeek != DayOfWeek.Tuesday)
+        {
+            firstOfMonth = firstOfMonth.AddDays(1);
+        }
+        
+        return firstOfMonth;
     }
 
     private async Task AddEntry()
