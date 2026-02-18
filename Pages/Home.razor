@@ -22,6 +22,9 @@
                         <label for="start">Search Range:</label>
                         <input id="start" type="date" @bind-value="start" @bind-value:after="GetEntries" />
                         - <input id="end" type="date" @bind-value="end" @bind-value:after="GetEntries" />
+                        <button @onclick="SetToday" style="margin-left: 5px;">Today</button>
+                        <button @onclick="SetCurrentWeek" style="margin-left: 5px;">Week</button>
+                        <button @onclick="SetCurrentMonth" style="margin-left: 5px;">Month</button>
                     </li>
                     <li>
                         <label style="float:left" for="date">Day:</label>
@@ -681,6 +684,37 @@
         time = TimeOnly.FromDateTime(snappedTime);
     }
 
+    private async Task SetToday()
+    {
+        var today = DateTime.Now.Date;
+        start = today;
+        end = today;
+        await GetEntries();
+    }
+
+    private async Task SetCurrentWeek()
+    {
+        var today = DateTime.Now.Date;
+        var daysToMonday = (int)today.DayOfWeek - 1;
+        var monday = today.AddDays(-daysToMonday);
+        var sunday = monday.AddDays(6);
+        
+        start = monday;
+        end = sunday;
+        await GetEntries();
+    }
+
+    private async Task SetCurrentMonth()
+    {
+        var today = DateTime.Now.Date;
+        var firstDayOfMonth = new DateTime(today.Year, today.Month, 1);
+        var lastDayOfMonth = firstDayOfMonth.AddMonths(1).AddDays(-1);
+        
+        start = firstDayOfMonth;
+        end = lastDayOfMonth;
+        await GetEntries();
+    }
+
     private string FormatTime(string timeString)
     {
         if (string.IsNullOrEmpty(timeString))
@@ -758,5 +792,4 @@
         public bool Billable { get; set; }
         public string Notes { get; set; } = string.Empty;
     }
-
 }

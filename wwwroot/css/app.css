@@ -308,3 +308,11 @@ body {
 .modal-footer button:last-child:hover {
     background: #7f8c8d;
 }
+
+button {
+    cursor: pointer;
+}
+
+button:hover {
+    cursor: pointer;
+}
