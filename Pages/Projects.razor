@@ -78,7 +78,9 @@
                                 <td>@(string.IsNullOrEmpty(project.DueDate) ? "-" : project.DueDate)</td>
                                 <td>@(string.IsNullOrEmpty(project.CompanyName) ? "-" : project.CompanyName)</td>
                                 <td class="small">@(string.IsNullOrEmpty(project.Description) ? "-" : project.Description)</td>
-                                <td><button @onclick="@(() => RemoveProject(@project.Id))" @onclick:stopPropagation="true">Remove</button></td>
+                                <td>
+                                    <button @onclick="@(() => RemoveProject(@project.Id))" @onclick:stopPropagation="true">Remove</button>
+                                </td>
                             </tr>
                         }
                         <tr>
@@ -144,6 +146,23 @@
     </div>
 }
 
+@if (showDeleteModal)
+{
+    <div class="modal-backdrop" @onclick="@CancelDeleteProject">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>Confirm Delete</h3>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the project "<strong>@deleteItemName</strong>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button @onclick="@ConfirmDeleteProject" style="background-color: #e74c3c;">Delete</button>
+                <button @onclick="@CancelDeleteProject">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool hide_it = true;
     private string label_text = "Some Text";
@@ -157,6 +176,10 @@
     
     private bool showEditModal = false;
     private EditProjectModel editingProject = new EditProjectModel();
+    
+    private bool showDeleteModal = false;
+    private string deleteItemName = string.Empty;
+    private int deleteItemId = 0;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -305,16 +328,18 @@
             return;
         }
 
-        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete project '{project.Name}'?");
+        deleteItemId = projectId;
+        deleteItemName = project.Name;
+        showDeleteModal = true;
+    }
 
-        if (!confirmed)
-        {
-            return;
-        }
+    private async Task ConfirmDeleteProject()
+    {
+        showDeleteModal = false;
 
-        var payload = new { project_id = projectId };
+        var payload = new { project_id = deleteItemId };
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         using var req = new HttpRequestMessage(HttpMethod.Delete, proj_endpoint)
         {
@@ -323,13 +348,11 @@
 
         try
         {
-            var resp = await Http.SendAsync(req); //.ConfigureAwait(false);
-            //var respContent = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            //var resp = await Http.PostAsync(api_base + proj_endpoint, content);
+            var resp = await Http.SendAsync(req);
             var respContent = await resp.Content.ReadAsStringAsync();
             if (resp.IsSuccessStatusCode)
             {
-                label_text = $"Project '{project.Name}' removed successfully.";
+                label_text = $"Project '{deleteItemName}' removed successfully.";
             }
             else
             {
@@ -345,7 +368,12 @@
         hide_it = false;
     }
 
-    private void EditProject(Project project)
+    private void CancelDeleteProject()
+    {
+        showDeleteModal = false;
+    }
+
+    private async Task EditProject(Project project)
     {
         editingProject = new EditProjectModel
         {

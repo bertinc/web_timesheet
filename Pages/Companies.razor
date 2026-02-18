@@ -104,6 +104,23 @@
     </div>
 }
 
+@if (showDeleteModal)
+{
+    <div class="modal-backdrop" @onclick="@CancelDeleteCompany">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>Confirm Delete</h3>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the company "<strong>@deleteItemName</strong>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button @onclick="@ConfirmDeleteCompany" style="background-color: #e74c3c;">Delete</button>
+                <button @onclick="@CancelDeleteCompany">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool hide_it = true;
     private string label_text = "Some Text";
@@ -114,6 +131,10 @@
     
     private bool showEditModal = false;
     private EditCompanyModel editingCompany = new EditCompanyModel();
+    
+    private bool showDeleteModal = false;
+    private string deleteItemName = string.Empty;
+    private int deleteItemId = 0;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -191,16 +212,18 @@
             return;
         }
 
-        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete company '{company.Name}'?");
+        deleteItemId = companyId;
+        deleteItemName = company.Name;
+        showDeleteModal = true;
+    }
 
-        if (!confirmed)
-        {
-            return;
-        }
+    private async Task ConfirmDeleteCompany()
+    {
+        showDeleteModal = false;
 
-        var payload = new { company_id = companyId };
+        var payload = new { company_id = deleteItemId };
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         using var req = new HttpRequestMessage(HttpMethod.Delete, comp_endpoint)
         {
@@ -209,13 +232,11 @@
 
         try
         {
-            var resp = await Http.SendAsync(req); //.ConfigureAwait(false);
-            //var respContent = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            //var resp = await Http.PostAsync(api_base + proj_endpoint, content);
+            var resp = await Http.SendAsync(req);
             var respContent = await resp.Content.ReadAsStringAsync();
             if (resp.IsSuccessStatusCode)
             {
-                label_text = $"Company '{company.Name}' removed successfully.";
+                label_text = $"Company '{deleteItemName}' removed successfully.";
             }
             else
             {
@@ -229,6 +250,11 @@
 
         await GetCompanies();
         hide_it = false;
+    }
+
+    private void CancelDeleteCompany()
+    {
+        showDeleteModal = false;
     }
 
     private async Task UpdateCompany(int companyId, string name, decimal? payRate, string description)
