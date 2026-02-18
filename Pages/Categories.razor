@@ -9,32 +9,47 @@
 
 <PageTitle>Categories</PageTitle>
 
+<!-- Main application container -->
 <div class="app">
+    <!-- Page header -->
     <header class="header">Manage Categories</header>
 
+    <!-- Main layout container -->
     <div class="main">
+        <!-- Left sidebar toolbar for adding new categories -->
         <aside class="toolbar">
             <nav>
                 <ul>
+                    <!-- Back to Home navigation link -->
                     <li><a href=".">Back to Home</a></li>
+                    
+                    <!-- Category Code input field -->
                     <li>
                         <label for="code">Category Code:</label>
                         <input id="code" type="text" @bind="newCategory.Code" placeholder="e.g., DEV" />
                     </li>
+                    
+                    <!-- Category Description textarea -->
                     <li>
                         <label for="description">Description:</label>
                         <textarea id="description" rows="4" @bind="newCategory.Description" class="w-100" placeholder="Category description"></textarea>
                     </li>
+                    
+                    <!-- Add Category button -->
                     <li><button @onclick="AddCategory">Add Category</button></li>
                 </ul>
             </nav>
         </aside>
 
+        <!-- Main content area displaying the categories table -->
         <section class="content">
             <h3>Existing Categories</h3>
+            
+            <!-- Categories table (shows if categories exist) -->
             @if (categories.Categories != null && categories.Categories.Count > 0)
             {
                 <table class="results_table" id="categories">
+                    <!-- Table header row -->
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -43,16 +58,23 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
+                    
+                    <!-- Table body - loops through all categories -->
                     <tbody>
                         @foreach (var category in categories.Categories)
                         {
+                            <!-- Category row (clickable to edit) -->
                             <tr @onclick="@(() => OpenEditModal(category))" style="cursor: pointer;">
                                 <td>@category.Id</td>
                                 <td>@category.Code</td>
+                                <!-- Display description or dash if empty -->
                                 <td class="small">@(string.IsNullOrEmpty(category.Description) ? "-" : category.Description)</td>
+                                <!-- Remove button (prevents row click from triggering edit) -->
                                 <td><button @onclick="@(() => RemoveCategory(@category.Id))" @onclick:stopPropagation="true">Remove</button></td>
                             </tr>
                         }
+                        
+                        <!-- Footer row showing total count -->
                         <tr>
                             <td colspan="100">Found @categories.Count categories</td>
                         </tr>
@@ -66,26 +88,37 @@
         </section>
     </div>
 
+    <!-- Footer with status message -->
     <footer class="footer">
         <label hidden="@hide_it">@label_text</label>
     </footer>
 </div>
 
+<!-- Edit Category Modal -->
 @if (showEditModal)
 {
+    <!-- Modal backdrop (clickable to close) -->
     <div class="modal-backdrop" @onclick="CloseEditModal">
+        <!-- Modal content container -->
         <div class="modal-content" @onclick:stopPropagation="true">
             <h3>Edit Category #@editingCategory.Id</h3>
+            
+            <!-- Modal body with form fields -->
             <div class="modal-body">
+                <!-- Category Code field -->
                 <div class="form-group">
                     <label for="edit-code">Category Code:</label>
                     <input id="edit-code" type="text" @bind="editingCategory.Code" />
                 </div>
+                
+                <!-- Category Description field -->
                 <div class="form-group">
                     <label for="edit-description">Description:</label>
                     <textarea id="edit-description" rows="4" @bind="editingCategory.Description"></textarea>
                 </div>
             </div>
+            
+            <!-- Modal action buttons -->
             <div class="modal-footer">
                 <button @onclick="SaveEditedCategory">Save</button>
                 <button @onclick="CloseEditModal">Cancel</button>
@@ -94,17 +127,26 @@
     </div>
 }
 
+<!-- Delete Confirmation Modal -->
 @if (showDeleteModal)
 {
+    <!-- Modal backdrop (clickable to cancel) -->
     <div class="modal-backdrop" @onclick="@CancelDeleteCategory">
+        <!-- Modal content container -->
         <div class="modal-content" @onclick:stopPropagation="true">
             <h3>Confirm Delete</h3>
+            
+            <!-- Modal body with confirmation message -->
             <div class="modal-body">
                 <p>Are you sure you want to delete the category "<strong>@deleteItemName</strong>"?</p>
                 <p>This action cannot be undone.</p>
             </div>
+            
+            <!-- Modal action buttons -->
             <div class="modal-footer">
+                <!-- Delete button (red warning color) -->
                 <button @onclick="@ConfirmDeleteCategory" style="background-color: #e74c3c;">Delete</button>
+                <!-- Cancel button -->
                 <button @onclick="@CancelDeleteCategory">Cancel</button>
             </div>
         </div>
@@ -112,20 +154,66 @@
 }
 
 @code {
+    /// <summary>
+    /// Controls visibility of the footer status message.
+    /// </summary>
     private bool hide_it = true;
+    
+    /// <summary>
+    /// Text displayed in the footer status message.
+    /// </summary>
     private string label_text = "Some Text";
+    
+    /// <summary>
+    /// Base URL for API calls to the backend server.
+    /// </summary>
     private string api_base = "http://10.0.0.192:8001/";
+    
+    /// <summary>
+    /// API endpoint for category operations.
+    /// </summary>
     private string cats_endpoint = "categories";
+    
+    /// <summary>
+    /// Collection of all categories loaded from the server.
+    /// </summary>
     private CategoriesResponse categories = new CategoriesResponse();
+    
+    /// <summary>
+    /// Model for a new category being added.
+    /// </summary>
     private Category newCategory = new Category();
     
+    /// <summary>
+    /// Controls visibility of the edit modal dialog.
+    /// </summary>
     private bool showEditModal = false;
+    
+    /// <summary>
+    /// Model for the category currently being edited in the modal.
+    /// </summary>
     private EditCategoryModel editingCategory = new EditCategoryModel();
     
+    /// <summary>
+    /// Controls visibility of the delete confirmation modal.
+    /// </summary>
     private bool showDeleteModal = false;
+    
+    /// <summary>
+    /// Name/code of the item being deleted, displayed in the confirmation dialog.
+    /// </summary>
     private string deleteItemName = string.Empty;
+    
+    /// <summary>
+    /// ID of the category being deleted.
+    /// </summary>
     private int deleteItemId = 0;
 
+    /// <summary>
+    /// Initialization hook called after the component has rendered for the first time.
+    /// Loads categories from the server on initial render.
+    /// </summary>
+    /// <param name="firstRender">True if this is the first render, false otherwise.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -135,6 +223,10 @@
         }
     }
 
+    /// <summary>
+    /// Fetches all categories from the backend API and populates the categories collection.
+    /// Updates the status message with the count of loaded categories or error information.
+    /// </summary>
     public async Task GetCategories()
     {
         var resp = await Http.GetAsync(api_base + cats_endpoint);
@@ -150,6 +242,10 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Adds a new category to the database via API.
+    /// Validates that the category code is provided, then sends the category data to the server.
+    /// </summary>
     private async Task AddCategory()
     {
         if (string.IsNullOrWhiteSpace(newCategory.Code))
@@ -191,6 +287,11 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Opens the delete confirmation modal for the specified category.
+    /// Stores the category ID and name to be used if deletion is confirmed.
+    /// </summary>
+    /// <param name="categoryId">The ID of the category to delete.</param>
     private async Task RemoveCategory(int categoryId)
     {
         var category = categories.Categories?.FirstOrDefault(c => c.Id == categoryId);
@@ -206,6 +307,10 @@
         showDeleteModal = true;
     }
 
+    /// <summary>
+    /// Sends the delete request to the API to remove the selected category.
+    /// Called when the user confirms deletion in the delete modal.
+    /// </summary>
     private async Task ConfirmDeleteCategory()
     {
         showDeleteModal = false;
@@ -241,11 +346,21 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Closes the delete confirmation modal without performing any deletion.
+    /// </summary>
     private void CancelDeleteCategory()
     {
         showDeleteModal = false;
     }
 
+    /// <summary>
+    /// Updates an existing category on the server via the API.
+    /// Validates that the category code is provided before sending the update request.
+    /// </summary>
+    /// <param name="categoryId">The ID of the category to update.</param>
+    /// <param name="code">The new category code.</param>
+    /// <param name="description">The new category description.</param>
     private async Task UpdateCategory(int categoryId, string code, string description)
     {
         if (string.IsNullOrWhiteSpace(code))
@@ -291,6 +406,11 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Opens the edit modal dialog with the selected category's data.
+    /// Populates the editing form with the category's current values.
+    /// </summary>
+    /// <param name="category">The category to edit.</param>
     private void OpenEditModal(Category category)
     {
         editingCategory = new EditCategoryModel
@@ -302,11 +422,18 @@
         showEditModal = true;
     }
 
+    /// <summary>
+    /// Closes the edit modal dialog without saving changes.
+    /// </summary>
     private void CloseEditModal()
     {
         showEditModal = false;
     }
 
+    /// <summary>
+    /// Saves the edited category by calling UpdateCategory.
+    /// Then closes the edit modal.
+    /// </summary>
     private async Task SaveEditedCategory()
     {
         await UpdateCategory(
@@ -317,6 +444,10 @@
         CloseEditModal();
     }
 
+    /// <summary>
+    /// Opens the delete modal dialog for the specified category.
+    /// </summary>
+    /// <param name="category">The category to delete.</param>
     private void OpenDeleteModal(Category category)
     {
         deleteItemName = category.Code;
@@ -324,11 +455,17 @@
         showDeleteModal = true;
     }
 
+    /// <summary>
+    /// Closes the delete confirmation modal without performing deletion.
+    /// </summary>
     private void CancelDelete()
     {
         showDeleteModal = false;
     }
 
+    /// <summary>
+    /// Confirms the deletion of a category by finding it in the collection and calling RemoveCategory.
+    /// </summary>
     private async Task ConfirmDelete()
     {
         if (categories.Categories != null && categories.Categories.Count > 0)
@@ -342,10 +479,24 @@
         CancelDelete();
     }
 
+    /// <summary>
+    /// Model for editing a category in the edit modal dialog.
+    /// </summary>
     public class EditCategoryModel
     {
+        /// <summary>
+        /// The unique identifier for the category.
+        /// </summary>
         public int Id { get; set; }
+        
+        /// <summary>
+        /// The category code (short name identifier).
+        /// </summary>
         public string Code { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// The full description of the category.
+        /// </summary>
         public string Description { get; set; } = string.Empty;
     }
 }

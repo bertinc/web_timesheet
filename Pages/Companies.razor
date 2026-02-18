@@ -9,36 +9,53 @@
 
 <PageTitle>Companies</PageTitle>
 
+<!-- Main application container -->
 <div class="app">
+    <!-- Page header -->
     <header class="header">Manage Companies</header>
 
+    <!-- Main layout container -->
     <div class="main">
+        <!-- Left sidebar toolbar for adding new companies -->
         <aside class="toolbar">
             <nav>
                 <ul>
+                    <!-- Back to Home navigation link -->
                     <li><a href=".">Back to Home</a></li>
+                    
+                    <!-- Company Name input field -->
                     <li>
                         <label for="name">Company Name:</label>
                         <input id="name" type="text" @bind="newCompany.Name" placeholder="e.g., Wasatch Photonics" />
                     </li>
+                    
+                    <!-- Pay Rate input field -->
                     <li>
                         <label for="payrate">Pay Rate:</label>
                         <input id="payrate" type="number" @bind="newCompany.PayRate" placeholder="e.g., 50.00" step="1.00" min="0" />
                     </li>
+                    
+                    <!-- Company Description textarea -->
                     <li>
                         <label for="description">Description:</label>
                         <textarea id="description" rows="4" @bind="newCompany.Description" class="w-100" placeholder="Company description"></textarea>
                     </li>
+                    
+                    <!-- Add Company button -->
                     <li><button @onclick="AddCompany">Add Company</button></li>
                 </ul>
             </nav>
         </aside>
 
+        <!-- Main content area displaying the companies table -->
         <section class="content">
             <h3>Existing Companies</h3>
+            
+            <!-- Companies table (shows if companies exist) -->
             @if (companies.Companies != null && companies.Companies.Count > 0)
             {
                 <table class="results_table" id="companies">
+                    <!-- Table header row -->
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -48,17 +65,25 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
+                    
+                    <!-- Table body - loops through all companies -->
                     <tbody>
                         @foreach (var company in companies.Companies)
                         {
+                            <!-- Company row (clickable to edit) -->
                             <tr @onclick="@(() => OpenEditModal(company))" style="cursor: pointer;">
                                 <td>@company.Id</td>
                                 <td>@company.Name</td>
+                                <!-- Display pay rate formatted as currency -->
                                 <td>@(company.PayRate.HasValue ? company.PayRate.Value.ToString("C") : "-")</td>
+                                <!-- Display description or dash if empty -->
                                 <td class="small">@(string.IsNullOrEmpty(company.Description) ? "-" : company.Description)</td>
+                                <!-- Remove button (prevents row click from triggering edit) -->
                                 <td><button @onclick="@(() => RemoveCompany(@company.Id))" @onclick:stopPropagation="true">Remove</button></td>
                             </tr>
                         }
+                        
+                        <!-- Footer row showing total count -->
                         <tr>
                             <td colspan="100">Found @companies.Count companies</td>
                         </tr>
@@ -72,30 +97,43 @@
         </section>
     </div>
 
+    <!-- Footer with status message -->
     <footer class="footer">
         <label hidden="@hide_it">@label_text</label>
     </footer>
 </div>
 
+<!-- Edit Company Modal -->
 @if (showEditModal)
 {
+    <!-- Modal backdrop (clickable to close) -->
     <div class="modal-backdrop" @onclick="CloseEditModal">
+        <!-- Modal content container -->
         <div class="modal-content" @onclick:stopPropagation="true">
             <h3>Edit Company #@editingCompany.Id</h3>
+            
+            <!-- Modal body with form fields -->
             <div class="modal-body">
+                <!-- Company Name field -->
                 <div class="form-group">
                     <label for="edit-name">Company Name:</label>
                     <input id="edit-name" type="text" @bind="editingCompany.Name" />
                 </div>
+                
+                <!-- Pay Rate field -->
                 <div class="form-group">
                     <label for="edit-payrate">Pay Rate:</label>
                     <input id="edit-payrate" type="number" @bind="editingCompany.PayRate" step="1.00" min="0" />
                 </div>
+                
+                <!-- Company Description field -->
                 <div class="form-group">
                     <label for="edit-description">Description:</label>
                     <textarea id="edit-description" rows="4" @bind="editingCompany.Description"></textarea>
                 </div>
             </div>
+            
+            <!-- Modal action buttons -->
             <div class="modal-footer">
                 <button @onclick="SaveEditedCompany">Save</button>
                 <button @onclick="CloseEditModal">Cancel</button>
@@ -104,17 +142,26 @@
     </div>
 }
 
+<!-- Delete Confirmation Modal -->
 @if (showDeleteModal)
 {
+    <!-- Modal backdrop (clickable to cancel) -->
     <div class="modal-backdrop" @onclick="@CancelDeleteCompany">
+        <!-- Modal content container -->
         <div class="modal-content" @onclick:stopPropagation="true">
             <h3>Confirm Delete</h3>
+            
+            <!-- Modal body with confirmation message -->
             <div class="modal-body">
                 <p>Are you sure you want to delete the company "<strong>@deleteItemName</strong>"?</p>
                 <p>This action cannot be undone.</p>
             </div>
+            
+            <!-- Modal action buttons -->
             <div class="modal-footer">
+                <!-- Delete button (red warning color) -->
                 <button @onclick="@ConfirmDeleteCompany" style="background-color: #e74c3c;">Delete</button>
+                <!-- Cancel button -->
                 <button @onclick="@CancelDeleteCompany">Cancel</button>
             </div>
         </div>
@@ -122,20 +169,66 @@
 }
 
 @code {
+    /// <summary>
+    /// Controls visibility of the footer status message.
+    /// </summary>
     private bool hide_it = true;
+    
+    /// <summary>
+    /// Text displayed in the footer status message.
+    /// </summary>
     private string label_text = "Some Text";
+    
+    /// <summary>
+    /// Base URL for API calls to the backend server.
+    /// </summary>
     private string api_base = "http://10.0.0.192:8001/";
+    
+    /// <summary>
+    /// API endpoint for company operations.
+    /// </summary>
     private string comp_endpoint = "companies";
+    
+    /// <summary>
+    /// Collection of all companies loaded from the server.
+    /// </summary>
     private CompaniesResponse companies = new CompaniesResponse();
+    
+    /// <summary>
+    /// Model for a new company being added.
+    /// </summary>
     private Company newCompany = new Company();
     
+    /// <summary>
+    /// Controls visibility of the edit modal dialog.
+    /// </summary>
     private bool showEditModal = false;
+    
+    /// <summary>
+    /// Model for the company currently being edited in the modal.
+    /// </summary>
     private EditCompanyModel editingCompany = new EditCompanyModel();
     
+    /// <summary>
+    /// Controls visibility of the delete confirmation modal.
+    /// </summary>
     private bool showDeleteModal = false;
+    
+    /// <summary>
+    /// Name of the company being deleted, displayed in the confirmation dialog.
+    /// </summary>
     private string deleteItemName = string.Empty;
+    
+    /// <summary>
+    /// ID of the company being deleted.
+    /// </summary>
     private int deleteItemId = 0;
 
+    /// <summary>
+    /// Initialization hook called after the component has rendered for the first time.
+    /// Loads companies from the server on initial render.
+    /// </summary>
+    /// <param name="firstRender">True if this is the first render, false otherwise.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -145,6 +238,10 @@
         }
     }
 
+    /// <summary>
+    /// Fetches all companies from the backend API and populates the companies collection.
+    /// Updates the status message with the count of loaded companies or error information.
+    /// </summary>
     public async Task GetCompanies()
     {
         var resp = await Http.GetAsync(api_base + comp_endpoint);
@@ -160,6 +257,10 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Adds a new company to the database via API.
+    /// Validates that the company name is provided, then sends the company data to the server.
+    /// </summary>
     private async Task AddCompany()
     {
         if (string.IsNullOrWhiteSpace(newCompany.Name))
@@ -202,6 +303,11 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Opens the delete confirmation modal for the specified company.
+    /// Stores the company ID and name to be used if deletion is confirmed.
+    /// </summary>
+    /// <param name="companyId">The ID of the company to delete.</param>
     private async Task RemoveCompany(int companyId)
     {
         var company = companies.Companies?.FirstOrDefault(c => c.Id == companyId);
@@ -217,6 +323,10 @@
         showDeleteModal = true;
     }
 
+    /// <summary>
+    /// Sends the delete request to the API to remove the selected company.
+    /// Called when the user confirms deletion in the delete modal.
+    /// </summary>
     private async Task ConfirmDeleteCompany()
     {
         showDeleteModal = false;
@@ -252,12 +362,23 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Closes the delete confirmation modal without performing any deletion.
+    /// </summary>
     private void CancelDeleteCompany()
     {
         showDeleteModal = false;
     }
 
-    private async Task UpdateCompany(int companyId, string name, decimal? payRate, string description)
+    /// <summary>
+    /// Updates an existing company on the server via the API.
+    /// Validates that the company name is provided before sending the update request.
+    /// </summary>
+    /// <param name="companyId">The ID of the company to update.</param>
+    /// <param name="name">The new company name.</param>
+    /// <param name="payRate">The new pay rate for the company.</param>
+    /// <param name="description">The new company description.</param>
+    private async Task UpdateCompany(int companyId, string name, decimal payRate, string description)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -303,23 +424,35 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Opens the edit modal dialog with the selected company's data.
+    /// Populates the editing form with the company's current values.
+    /// </summary>
+    /// <param name="company">The company to edit.</param>
     private void OpenEditModal(Company company)
     {
         editingCompany = new EditCompanyModel
         {
             Id = company.Id,
             Name = company.Name ?? string.Empty,
-            PayRate = company.PayRate,
+            PayRate = company.PayRate ?? 0,
             Description = company.Description ?? string.Empty
         };
         showEditModal = true;
     }
 
+    /// <summary>
+    /// Closes the edit modal dialog without saving changes.
+    /// </summary>
     private void CloseEditModal()
     {
         showEditModal = false;
     }
 
+    /// <summary>
+    /// Saves the edited company by calling UpdateCompany.
+    /// Then closes the edit modal.
+    /// </summary>
     private async Task SaveEditedCompany()
     {
         await UpdateCompany(
@@ -331,11 +464,29 @@
         CloseEditModal();
     }
 
+    /// <summary>
+    /// Model for editing a company in the edit modal dialog.
+    /// </summary>
     public class EditCompanyModel
     {
+        /// <summary>
+        /// The unique identifier for the company.
+        /// </summary>
         public int Id { get; set; }
+        
+        /// <summary>
+        /// The company name.
+        /// </summary>
         public string Name { get; set; } = string.Empty;
-        public decimal? PayRate { get; set; }
+        
+        /// <summary>
+        /// The hourly or project-based pay rate for this company.
+        /// </summary>
+        public decimal PayRate { get; set; }
+        
+        /// <summary>
+        /// The full description of the company.
+        /// </summary>
         public string Description { get; set; } = string.Empty;
     }
 }

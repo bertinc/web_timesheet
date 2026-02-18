@@ -9,30 +9,45 @@
 
 <PageTitle>Projects</PageTitle>
 
+<!-- Main application container -->
 <div class="app">
+    <!-- Page header -->
     <header class="header">Manage Projects</header>
 
+    <!-- Main layout container -->
     <div class="main">
+        <!-- Left sidebar toolbar for adding new projects -->
         <aside class="toolbar">
             <nav>
                 <ul>
+                    <!-- Back to Home navigation link -->
                     <li><a href=".">Back to Home</a></li>
+                    
+                    <!-- Project Code input field -->
                     <li>
                         <label for="code">Project Code:</label>
                         <input id="code" type="text" @bind="newProject.Code" placeholder="e.g., PROJ001" />
                     </li>
+                    
+                    <!-- Project Name input field -->
                     <li>
                         <label for="name">Project Name:</label>
                         <input id="name" type="text" @bind="newProject.Name" placeholder="e.g., Website Redesign" />
                     </li>
+                    
+                    <!-- Project Due Date input -->
                     <li>
                         <label for="duedate">Due Date:</label>
                         <input id="duedate" type="date" @bind="dueDate" />
                     </li>
+                    
+                    <!-- No Due Date checkbox -->
                     <li>
                         <label style="float:left" for="blankdate">No Due Date:</label>
                         <input id="blankdate" type="checkbox" @bind="blankDate" />
                     </li>
+                    
+                    <!-- Company selection dropdown -->
                     <li>
                         <label for="company">Company:</label>
                         <select id="company" @bind="newProject.CompanyId">
@@ -43,20 +58,28 @@
                             }
                         </select>
                     </li>
+                    
+                    <!-- Project Description textarea -->
                     <li>
                         <label for="description">Description:</label>
                         <textarea id="description" rows="4" @bind="newProject.Description" class="w-100" placeholder="Project description"></textarea>
                     </li>
+                    
+                    <!-- Add Project button -->
                     <li><button @onclick="AddProject">Add Project</button></li>
                 </ul>
             </nav>
         </aside>
 
+        <!-- Main content area displaying the projects table -->
         <section class="content">
             <h3>Existing Projects</h3>
+            
+            <!-- Projects table (shows if projects exist) -->
             @if (projects.Projects != null && projects.Projects.Count > 0)
             {
                 <table class="results_table" id="projects">
+                    <!-- Table header row -->
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -68,21 +91,30 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
+                    
+                    <!-- Table body - loops through all projects -->
                     <tbody>
                         @foreach (var project in projects.Projects)
                         {
+                            <!-- Project row (clickable to edit) -->
                             <tr @onclick="@(() => OpenEditModal(project))" style="cursor: pointer;">
                                 <td>@project.Id</td>
                                 <td>@project.Code</td>
                                 <td>@project.Name</td>
+                                <!-- Display due date or dash if not set -->
                                 <td>@(string.IsNullOrEmpty(project.DueDate) ? "-" : project.DueDate)</td>
+                                <!-- Display company name or dash if not assigned -->
                                 <td>@(string.IsNullOrEmpty(project.CompanyName) ? "-" : project.CompanyName)</td>
+                                <!-- Display description or dash if empty -->
                                 <td class="small">@(string.IsNullOrEmpty(project.Description) ? "-" : project.Description)</td>
+                                <!-- Remove button (prevents row click from triggering edit) -->
                                 <td>
                                     <button @onclick="@(() => RemoveProject(@project.Id))" @onclick:stopPropagation="true">Remove</button>
                                 </td>
                             </tr>
                         }
+                        
+                        <!-- Footer row showing total count -->
                         <tr>
                             <td colspan="100">Found @projects.Count projects</td>
                         </tr>
@@ -96,33 +128,48 @@
         </section>
     </div>
 
+    <!-- Footer with status message -->
     <footer class="footer">
         <label hidden="@hide_it">@label_text</label>
     </footer>
 </div>
 
+<!-- Edit Project Modal -->
 @if (showEditModal)
 {
+    <!-- Modal backdrop (clickable to close) -->
     <div class="modal-backdrop" @onclick="CloseEditModal">
+        <!-- Modal content container -->
         <div class="modal-content" @onclick:stopPropagation="true">
             <h3>Edit Project #@editingProject.Id</h3>
+            
+            <!-- Modal body with form fields -->
             <div class="modal-body">
+                <!-- Project Code field -->
                 <div class="form-group">
                     <label for="edit-code">Project Code:</label>
                     <input id="edit-code" type="text" @bind="editingProject.Code" />
                 </div>
+                
+                <!-- Project Name field -->
                 <div class="form-group">
                     <label for="edit-name">Project Name:</label>
                     <input id="edit-name" type="text" @bind="editingProject.Name" />
                 </div>
+                
+                <!-- Due Date field -->
                 <div class="form-group">
                     <label for="edit-duedate">Due Date:</label>
                     <input id="edit-duedate" type="date" @bind="editingProject.DueDate" />
                 </div>
+                
+                <!-- No Due Date checkbox -->
                 <div class="form-group">
                     <label for="edit-blankdate">No Due Date:</label>
                     <input id="edit-blankdate" type="checkbox" @bind="editingProject.NoDueDate" />
                 </div>
+                
+                <!-- Company selection dropdown -->
                 <div class="form-group">
                     <label for="edit-company">Company:</label>
                     <select id="edit-company" @bind="editingProject.CompanyId">
@@ -133,11 +180,15 @@
                         }
                     </select>
                 </div>
+                
+                <!-- Project Description field -->
                 <div class="form-group">
                     <label for="edit-description">Description:</label>
                     <textarea id="edit-description" rows="4" @bind="editingProject.Description"></textarea>
                 </div>
             </div>
+            
+            <!-- Modal action buttons -->
             <div class="modal-footer">
                 <button @onclick="SaveEditedProject">Save</button>
                 <button @onclick="CloseEditModal">Cancel</button>
@@ -146,17 +197,26 @@
     </div>
 }
 
+<!-- Delete Confirmation Modal -->
 @if (showDeleteModal)
 {
+    <!-- Modal backdrop (clickable to cancel) -->
     <div class="modal-backdrop" @onclick="@CancelDeleteProject">
+        <!-- Modal content container -->
         <div class="modal-content" @onclick:stopPropagation="true">
             <h3>Confirm Delete</h3>
+            
+            <!-- Modal body with confirmation message -->
             <div class="modal-body">
                 <p>Are you sure you want to delete the project "<strong>@deleteItemName</strong>"?</p>
                 <p>This action cannot be undone.</p>
             </div>
+            
+            <!-- Modal action buttons -->
             <div class="modal-footer">
+                <!-- Delete button (red warning color) -->
                 <button @onclick="@ConfirmDeleteProject" style="background-color: #e74c3c;">Delete</button>
+                <!-- Cancel button -->
                 <button @onclick="@CancelDeleteProject">Cancel</button>
             </div>
         </div>
@@ -164,23 +224,81 @@
 }
 
 @code {
+    /// <summary>
+    /// Controls visibility of the footer status message.
+    /// </summary>
     private bool hide_it = true;
+    
+    /// <summary>
+    /// Text displayed in the footer status message.
+    /// </summary>
     private string label_text = "Some Text";
+    
+    /// <summary>
+    /// Base URL for API calls to the backend server.
+    /// </summary>
     private string api_base = "http://10.0.0.192:8001/";
+    
+    /// <summary>
+    /// API endpoint for project operations.
+    /// </summary>
     private string proj_endpoint = "projects";
+    
+    /// <summary>
+    /// Collection of all projects loaded from the server.
+    /// </summary>
     private ProjectsResponse projects = new ProjectsResponse();
+    
+    /// <summary>
+    /// Collection of all companies loaded from the server.
+    /// </summary>
     private CompaniesResponse companies = new CompaniesResponse();
+    
+    /// <summary>
+    /// Temporary due date value for new projects being added.
+    /// </summary>
     private DateTime dueDate = DateTime.Today;
+    
+    /// <summary>
+    /// Model for a new project being added.
+    /// </summary>
     private Project newProject = new Project();
+    
+    /// <summary>
+    /// Flag indicating whether the new project has no due date.
+    /// </summary>
     private bool blankDate = true;
     
+    /// <summary>
+    /// Controls visibility of the edit modal dialog.
+    /// </summary>
     private bool showEditModal = false;
+    
+    /// <summary>
+    /// Model for the project currently being edited in the modal.
+    /// </summary>
     private EditProjectModel editingProject = new EditProjectModel();
     
+    /// <summary>
+    /// Controls visibility of the delete confirmation modal.
+    /// </summary>
     private bool showDeleteModal = false;
+    
+    /// <summary>
+    /// Name of the project being deleted, displayed in the confirmation dialog.
+    /// </summary>
     private string deleteItemName = string.Empty;
+    
+    /// <summary>
+    /// ID of the project being deleted.
+    /// </summary>
     private int deleteItemId = 0;
 
+    /// <summary>
+    /// Initialization hook called after the component has rendered for the first time.
+    /// Loads projects and companies from the server on initial render.
+    /// </summary>
+    /// <param name="firstRender">True if this is the first render, false otherwise.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -191,6 +309,9 @@
         }
     }
 
+    /// <summary>
+    /// Fetches all companies from the backend API and populates the companies collection.
+    /// </summary>
     public async Task GetCompanies()
     {
         var resp = await Http.GetAsync(api_base + "companies");
@@ -200,6 +321,10 @@
         }
     }
 
+    /// <summary>
+    /// Fetches all projects from the backend API and populates the projects collection.
+    /// Updates the status message with the count of loaded projects or error information.
+    /// </summary>
     public async Task GetProjects()
     {
         var resp = await Http.GetAsync(api_base + proj_endpoint);
@@ -215,6 +340,10 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Adds a new project to the database via API.
+    /// Validates that the project code and name are provided, then sends the project data to the server.
+    /// </summary>
     private async Task AddProject()
     {
         if (string.IsNullOrWhiteSpace(newProject.Code) || string.IsNullOrWhiteSpace(newProject.Name))
@@ -270,6 +399,83 @@
         hide_it = false;
     }
 
+    /// <summary>
+    /// Opens the delete confirmation modal for the specified project.
+    /// Stores the project ID and name to be used if deletion is confirmed.
+    /// </summary>
+    /// <param name="projectId">The ID of the project to delete.</param>
+    private async Task RemoveProject(int projectId)
+    {
+        var project = projects.Projects?.FirstOrDefault(p => p.Id == projectId);
+        if (project == null)
+        {
+            label_text = "Project not found.";
+            hide_it = false;
+            return;
+        }
+
+        deleteItemId = projectId;
+        deleteItemName = project.Name;
+        showDeleteModal = true;
+    }
+
+    /// <summary>
+    /// Sends the delete request to the API to remove the selected project.
+    /// Called when the user confirms deletion in the delete modal.
+    /// </summary>
+    private async Task ConfirmDeleteProject()
+    {
+        showDeleteModal = false;
+
+        var payload = new { project_id = deleteItemId };
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var req = new HttpRequestMessage(HttpMethod.Delete, proj_endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        try
+        {
+            var resp = await Http.SendAsync(req);
+            var respContent = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode)
+            {
+                label_text = $"Project '{deleteItemName}' removed successfully.";
+            }
+            else
+            {
+                label_text = $"Error: {resp.StatusCode} - {respContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            label_text = $"Error removing project: {ex.Message}";
+        }
+
+        await GetProjects();
+        hide_it = false;
+    }
+
+    /// <summary>
+    /// Closes the delete confirmation modal without performing any deletion.
+    /// </summary>
+    private void CancelDeleteProject()
+    {
+        showDeleteModal = false;
+    }
+
+    /// <summary>
+    /// Updates an existing project on the server via the API.
+    /// Validates that the project code and name are provided before sending the update request.
+    /// </summary>
+    /// <param name="projectId">The ID of the project to update.</param>
+    /// <param name="code">The new project code.</param>
+    /// <param name="name">The new project name.</param>
+    /// <param name="dueDate">The new project due date (or null if no due date).</param>
+    /// <param name="companyId">The ID of the assigned company (or null if not assigned).</param>
+    /// <param name="description">The new project description.</param>
     private async Task UpdateProject(int projectId, string code, string name, string dueDate, int? companyId, string description)
     {
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
@@ -318,124 +524,11 @@
         hide_it = false;
     }
 
-    private async Task RemoveProject(int projectId)
-    {
-        var project = projects.Projects?.FirstOrDefault(p => p.Id == projectId);
-        if (project == null)
-        {
-            label_text = "Project not found.";
-            hide_it = false;
-            return;
-        }
-
-        deleteItemId = projectId;
-        deleteItemName = project.Name;
-        showDeleteModal = true;
-    }
-
-    private async Task ConfirmDeleteProject()
-    {
-        showDeleteModal = false;
-
-        var payload = new { project_id = deleteItemId };
-        var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var req = new HttpRequestMessage(HttpMethod.Delete, proj_endpoint)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
-
-        try
-        {
-            var resp = await Http.SendAsync(req);
-            var respContent = await resp.Content.ReadAsStringAsync();
-            if (resp.IsSuccessStatusCode)
-            {
-                label_text = $"Project '{deleteItemName}' removed successfully.";
-            }
-            else
-            {
-                label_text = $"Error: {resp.StatusCode} - {respContent}";
-            }
-        }
-        catch (Exception ex)
-        {
-            label_text = $"Error removing project: {ex.Message}";
-        }
-
-        await GetProjects();
-        hide_it = false;
-    }
-
-    private void CancelDeleteProject()
-    {
-        showDeleteModal = false;
-    }
-
-    private async Task EditProject(Project project)
-    {
-        editingProject = new EditProjectModel
-        {
-            Id = project.Id,
-            Code = project.Code,
-            Name = project.Name,
-            DueDate = DateTime.Parse(project.DueDate),
-            CompanyId = project.CompanyId,
-            Description = project.Description
-        };
-        showEditModal = true;
-    }
-
-    private async Task SaveEdit()
-    {
-        if (editingProject.Id <= 0)
-        {
-            label_text = "Invalid project ID.";
-            hide_it = false;
-            return;
-        }
-
-        var payload = new
-        {
-            project_id = editingProject.Id,
-            code = editingProject.Code,
-            name = editingProject.Name,
-            due_date = editingProject.DueDate.ToString("yyyy-MM-dd"),
-            company_id = editingProject.CompanyId,
-            description = editingProject.Description
-        };
-
-        var json = JsonSerializer.Serialize(payload);
-
-        using var req = new HttpRequestMessage(HttpMethod.Put, api_base + proj_endpoint)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
-
-        try
-        {
-            var resp = await Http.SendAsync(req);
-            var respContent = await resp.Content.ReadAsStringAsync();
-            if (resp.IsSuccessStatusCode)
-            {
-                label_text = $"Project '{editingProject.Name}' updated successfully.";
-            }
-            else
-            {
-                label_text = $"Error: {resp.StatusCode} - {respContent}";
-            }
-        }
-        catch (Exception ex)
-        {
-            label_text = $"Error updating project: {ex.Message}";
-        }
-
-        showEditModal = false;
-        await GetProjects();
-        hide_it = false;
-    }
-
+    /// <summary>
+    /// Opens the edit modal dialog with the selected project's data.
+    /// Populates the editing form with the project's current values.
+    /// </summary>
+    /// <param name="project">The project to edit.</param>
     private void OpenEditModal(Project project)
     {
         editingProject = new EditProjectModel
@@ -451,11 +544,18 @@
         showEditModal = true;
     }
 
+    /// <summary>
+    /// Closes the edit modal dialog without saving changes.
+    /// </summary>
     private void CloseEditModal()
     {
         showEditModal = false;
     }
 
+    /// <summary>
+    /// Saves the edited project by calling UpdateProject.
+    /// Then closes the edit modal.
+    /// </summary>
     private async Task SaveEditedProject()
     {
         string dueDateStr = editingProject.NoDueDate ? null : editingProject.DueDate.ToString("yyyy-MM-dd");
@@ -471,14 +571,44 @@
         CloseEditModal();
     }
 
+    /// <summary>
+    /// Model for editing a project in the edit modal dialog.
+    /// </summary>
     public class EditProjectModel
     {
+        /// <summary>
+        /// The unique identifier for the project.
+        /// </summary>
         public int Id { get; set; }
+        
+        /// <summary>
+        /// The project code (short identifier).
+        /// </summary>
         public string Code { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// The project name.
+        /// </summary>
         public string Name { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// The project due date.
+        /// </summary>
         public DateTime DueDate { get; set; }
+        
+        /// <summary>
+        /// Flag indicating whether the project has no due date.
+        /// </summary>
         public bool NoDueDate { get; set; }
+        
+        /// <summary>
+        /// The ID of the company assigned to this project.
+        /// </summary>
         public int? CompanyId { get; set; }
+        
+        /// <summary>
+        /// The full description of the project.
+        /// </summary>
         public string Description { get; set; } = string.Empty;
     }
 }
