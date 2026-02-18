@@ -30,6 +30,7 @@
                     <li>
                         <label style="float:left" for="time">Time:</label>
                         <input id="time" type="time" @bind="time" />
+                        <button @onclick="SnapToNow" style="margin-left: 5px;">Now</button>
                     </li>
                     <li>
                         <label style="float:left" for="hrs">Enter Hours:</label>
@@ -41,7 +42,7 @@
                     </li>
                     <li>
                         <label for="category">Category:</label>
-                        <select id="category" @bind="selectedCategoryId" @onclick="GetEntries">
+                        <select id="category" @bind="selectedCategoryId" @bind:after="GetEntries">
                             <option value="0" selected>None</option>
                             @foreach (var c in categories.Categories ?? new List<Category>())
                             {
@@ -51,7 +52,7 @@
                     </li>
                     <li>
                         <label for="company">Company:</label>
-                        <select id="company" @bind="selectedCompanyId" @onclick="GetEntries">
+                        <select id="company" @bind="selectedCompanyId" @bind:after="GetEntries">
                             <option value="0" selected>None</option>
                             @foreach (var comp in companies.Companies ?? new List<Company>())
                             {
@@ -61,7 +62,7 @@
                     </li>
                     <li>
                         <label for="project">Project:</label>
-                        <select id="project" @bind="selectedProjectId" @onclick="GetEntries">
+                        <select id="project" @bind="selectedProjectId" @bind:after="GetEntries">
                             <option value="0" selected>None</option>
                             @foreach (var proj in projects.Projects ?? new List<Project>())
                             {
@@ -74,7 +75,7 @@
                     </li>
                     <li>
                         <label style="float:left; vertical-align:middle;" for="billable">Billable:</label>
-                        <input id="billable" type="checkbox" @bind="billable" @onclick="GetEntries" />
+                        <input id="billable" type="checkbox" @bind="billable" @bind:after="GetEntries" />
                     </li>
                     <li>
                         <label for="details">Notes:</label>
@@ -98,9 +99,10 @@
                 <table class="results_table" id="entries">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            @* <th>ID</th> *@
                             <th>Date</th>
                             <th>Start</th>
+                            <th>End</th>
                             <th>Minutes</th>
                             <th>Description</th>
                             <th>Category</th>
@@ -114,9 +116,10 @@
                         @foreach (var entry in SearchResults.Entries)
                         {
                             <tr @onclick="@(() => OpenEditModal(entry))" style="cursor: pointer;">
-                                <td>@entry.Id</td>
+                                @* <td>@entry.Id</td> *@
                                 <td>@entry.EntryDate</td>
-                                <td>@entry.StartTime</td>
+                                <td>@FormatTime(entry.StartTime)</td>
+                                <td>@FormatTime(entry.EndTime)</td>
                                 <td>@entry.DurationMinutes</td>
                                 <td class="small">@entry.Description</td>
                                 <td>@entry.CategoryCode</td>
@@ -664,6 +667,46 @@
             editingEntry.Notes
         );
         CloseEditModal();
+    }
+
+    private async Task SnapToNow()
+    {
+        var now = DateTime.Now;
+        var minutes = now.Minute;
+        var roundedMinutes = (int)Math.Round(minutes / 15.0) * 15;
+        
+        var snappedTime = now.AddMinutes(roundedMinutes - minutes);
+        
+        date = snappedTime.Date;
+        time = TimeOnly.FromDateTime(snappedTime);
+    }
+
+    private string FormatTime(string timeString)
+    {
+        if (string.IsNullOrEmpty(timeString))
+            return "-";
+        
+        try
+        {
+            // Check if it contains a space (likely datetime format like "2024-01-15 14:30:00")
+            if (timeString.Contains(" "))
+            {
+                // Extract just the time portion
+                var timePortion = timeString.Split(" ")[1];
+                var time = TimeOnly.Parse(timePortion);
+                return time.ToString("h:mm tt");
+            }
+            else
+            {
+                // Try parsing as just time (HH:mm or HH:mm:ss)
+                var time = TimeOnly.Parse(timeString);
+                return time.ToString("h:mm tt");
+            }
+        }
+        catch
+        {
+            return timeString;
+        }
     }
 
     public class SearchParams
