@@ -20,32 +20,32 @@
                     <li><a href="projects">Edit Projects</a></li>
                     <li>
                         <label for="start">Search Range:</label>
-                        <input id="start" type="date" @bind-value="start" @bind-value:after="GetEntries" />
-                        - <input id="end" type="date" @bind-value="end" @bind-value:after="GetEntries" />
+                        <input id="start" type="date" @bind-value="start" @bind-value:after="OnStartDateChanged" />
+                        - <input id="end" type="date" @bind-value="end" @bind-value:after="OnEndDateChanged" />
                         <button @onclick="SetToday" style="margin-left: 5px;">Today</button>
                         <button @onclick="SetCurrentWeek" style="margin-left: 5px;">Week</button>
                         <button @onclick="SetCurrentMonth" style="margin-left: 5px;">Month</button>
                     </li>
                     <li>
                         <label style="float:left" for="date">Day:</label>
-                        <input id="date" type="date" @bind="date" />
+                        <input id="date" type="date" @bind="date" @bind:after="OnDateChanged" />
                     </li>
                     <li>
                         <label style="float:left" for="time">Time:</label>
-                        <input id="time" type="time" @bind="time" />
+                        <input id="time" type="time" @bind="time" @bind:after="OnTimeChanged" />
                         <button @onclick="SnapToNow" style="margin-left: 5px;">Now</button>
                     </li>
                     <li>
                         <label style="float:left" for="hrs">Enter Hours:</label>
-                        <input @ref="inputHours" id="hrs" type="number" min="0" max="24" step="0.25" @bind="hours" />
+                        <input @ref="inputHours" id="hrs" type="number" min="0" max="24" step="0.25" @bind="hours" @bind:after="OnHoursChanged" />
                     </li>
                     <li>
                         <label for="cmt">Comment:</label>
-                        <textarea id="cmt" rows="2" @bind="comment" class="w-100"></textarea>
+                        <textarea id="cmt" rows="2" @bind="comment" @bind:after="OnCommentChanged" class="w-100"></textarea>
                     </li>
                     <li>
                         <label for="category">Category:</label>
-                        <select id="category" @bind="selectedCategoryId" @bind:after="GetEntries">
+                        <select id="category" @bind="selectedCategoryId" @bind:after="OnCategoryChanged">
                             <option value="0" selected>None</option>
                             @foreach (var c in categories.Categories ?? new List<Category>())
                             {
@@ -55,7 +55,7 @@
                     </li>
                     <li>
                         <label for="company">Company:</label>
-                        <select id="company" @bind="selectedCompanyId" @bind:after="GetEntries">
+                        <select id="company" @bind="selectedCompanyId" @bind:after="OnCompanyChanged">
                             <option value="0" selected>None</option>
                             @foreach (var comp in companies.Companies ?? new List<Company>())
                             {
@@ -65,7 +65,7 @@
                     </li>
                     <li>
                         <label for="project">Project:</label>
-                        <select id="project" @bind="selectedProjectId" @bind:after="GetEntries">
+                        <select id="project" @bind="selectedProjectId" @bind:after="OnProjectChanged">
                             <option value="0" selected>None</option>
                             @foreach (var proj in projects.Projects ?? new List<Project>())
                             {
@@ -78,11 +78,11 @@
                     </li>
                     <li>
                         <label style="float:left; vertical-align:middle;" for="billable">Billable:</label>
-                        <input id="billable" type="checkbox" @bind="billable" @bind:after="GetEntries" />
+                        <input id="billable" type="checkbox" @bind="billable" @bind:after="OnBillableChanged" />
                     </li>
                     <li>
                         <label for="details">Notes:</label>
-                        <textarea id="details" rows="4" @bind="details" class="w-100"></textarea>
+                        <textarea id="details" rows="4" @bind="details" @bind:after="OnDetailsChanged" class="w-100"></textarea>
                     </li>
                     <li><button @onclick="AddEntry">Add Entry</button> <button @onclick="GetReport">Download Report</button></li>
                     <li>
@@ -283,6 +283,14 @@
     private string autoSelectCategoryCode = "DEV";
     private string autoSelectCompanyName = "Wasatch Photonics";
 
+    private IJSObjectReference module;
+    private const string FORM_STATE_KEY = "home_form_state";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFormState();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // execute conditionally for loading data, otherwise this will load
@@ -305,10 +313,13 @@
         {
             categories = await resp.Content.ReadFromJsonAsync<CategoriesResponse>();
 
-            // Auto-select category by code (set autoSelectCategoryCode above)
-            selectedCategoryId = categories.Categories?
-                .FirstOrDefault(c => string.Equals(c.Code, autoSelectCategoryCode, StringComparison.OrdinalIgnoreCase))
-                ?.Id ?? 0;
+            // Auto-select category by code only if not already set from restored state
+            if (!selectedCategoryId.HasValue || selectedCategoryId == 0)
+            {
+                selectedCategoryId = categories.Categories?
+                    .FirstOrDefault(c => string.Equals(c.Code, autoSelectCategoryCode, StringComparison.OrdinalIgnoreCase))
+                    ?.Id ?? 0;
+            }
         }
     }
 
@@ -319,10 +330,13 @@
         {
             companies = await resp.Content.ReadFromJsonAsync<CompaniesResponse>();
 
-            // Auto-select company by name (set autoSelectCompanyName above)
-            selectedCompanyId = companies.Companies?
-                .FirstOrDefault(c => string.Equals(c.Name, autoSelectCompanyName, StringComparison.OrdinalIgnoreCase))
-                ?.Id ?? 0;
+            // Auto-select company by name only if not already set from restored state
+            if (!selectedCompanyId.HasValue || selectedCompanyId == 0)
+            {
+                selectedCompanyId = companies.Companies?
+                    .FirstOrDefault(c => string.Equals(c.Name, autoSelectCompanyName, StringComparison.OrdinalIgnoreCase))
+                    ?.Id ?? 0;
+            }
         }
     }
 
@@ -711,6 +725,8 @@
         
         date = snappedTime.Date;
         time = TimeOnly.FromDateTime(snappedTime);
+        
+        await SaveFormState();
     }
 
     private async Task SetToday()
@@ -718,6 +734,7 @@
         var today = DateTime.Now.Date;
         start = today;
         end = today;
+        await SaveFormState();
         await GetEntries();
     }
 
@@ -730,6 +747,7 @@
         
         start = monday;
         end = sunday;
+        await SaveFormState();
         await GetEntries();
     }
 
@@ -741,6 +759,7 @@
         
         start = firstDayOfMonth;
         end = lastDayOfMonth;
+        await SaveFormState();
         await GetEntries();
     }
 
@@ -820,5 +839,239 @@
         public int ProjectId { get; set; }
         public bool Billable { get; set; }
         public string Notes { get; set; } = string.Empty;
+    }
+
+    private async Task SaveFormState()
+    {
+        try
+        {
+            module ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/storage.js");
+            
+            var state = new
+            {
+                date = date.ToString("yyyy-MM-dd"),
+                time = time.ToString("HH:mm"),
+                hours = hours,
+                billable = billable,
+                comment = comment,
+                details = details,
+                selectedCategoryId = selectedCategoryId,
+                selectedCompanyId = selectedCompanyId,
+                selectedProjectId = selectedProjectId,
+                start = start.ToString("yyyy-MM-dd"),
+                end = end.ToString("yyyy-MM-dd")
+            };
+            
+            await module.InvokeVoidAsync("saveFormState", FORM_STATE_KEY, state);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving form state: {ex.Message}");
+        }
+    }
+
+    private async Task LoadFormState()
+    {
+        try
+        {
+            module ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/storage.js");
+            
+            var stateJson = await module.InvokeAsync<string>("loadFormState", FORM_STATE_KEY);
+            
+            Console.WriteLine($"[DEBUG] LoadFormState - Retrieved JSON: {stateJson != null}");
+            
+            if (!string.IsNullOrEmpty(stateJson))
+            {
+                try
+                {
+                    using (JsonDocument doc = JsonDocument.Parse(stateJson))
+                    {
+                        JsonElement root = doc.RootElement;
+                        
+                        // Parse and restore the state
+                        if (root.TryGetProperty("date", out JsonElement dateElem) && dateElem.ValueKind == JsonValueKind.String)
+                        {
+                            string dateStr = dateElem.GetString();
+                            if (DateTime.TryParse(dateStr, out DateTime savedDate))
+                            {
+                                date = savedDate;
+                                Console.WriteLine($"[DEBUG] Restored date: {date}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("time", out JsonElement timeElem) && timeElem.ValueKind == JsonValueKind.String)
+                        {
+                            string timeStr = timeElem.GetString();
+                            if (TimeOnly.TryParse(timeStr, out TimeOnly savedTime))
+                            {
+                                time = savedTime;
+                                Console.WriteLine($"[DEBUG] Restored time: {time}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("hours", out JsonElement hoursElem) && hoursElem.ValueKind == JsonValueKind.Number)
+                        {
+                            if (hoursElem.TryGetSingle(out float savedHours))
+                            {
+                                hours = savedHours;
+                                Console.WriteLine($"[DEBUG] Restored hours: {hours}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("billable", out JsonElement billableElem) && billableElem.ValueKind == JsonValueKind.True || billableElem.ValueKind == JsonValueKind.False)
+                        {
+                            billable = billableElem.GetBoolean();
+                            Console.WriteLine($"[DEBUG] Restored billable: {billable}");
+                        }
+                        
+                        if (root.TryGetProperty("comment", out JsonElement commentElem) && commentElem.ValueKind == JsonValueKind.String)
+                        {
+                            comment = commentElem.GetString() ?? string.Empty;
+                            Console.WriteLine($"[DEBUG] Restored comment: {comment}");
+                        }
+                        
+                        if (root.TryGetProperty("details", out JsonElement detailsElem) && detailsElem.ValueKind == JsonValueKind.String)
+                        {
+                            details = detailsElem.GetString() ?? string.Empty;
+                            Console.WriteLine($"[DEBUG] Restored details: {details}");
+                        }
+                        
+                        // Parse nullable int values
+                        if (root.TryGetProperty("selectedCategoryId", out JsonElement catElem) && catElem.ValueKind == JsonValueKind.Number)
+                        {
+                            if (catElem.TryGetInt32(out int catId))
+                            {
+                                selectedCategoryId = catId;
+                                Console.WriteLine($"[DEBUG] Restored selectedCategoryId: {selectedCategoryId}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("selectedCompanyId", out JsonElement compElem) && compElem.ValueKind == JsonValueKind.Number)
+                        {
+                            if (compElem.TryGetInt32(out int compId))
+                            {
+                                selectedCompanyId = compId;
+                                Console.WriteLine($"[DEBUG] Restored selectedCompanyId: {selectedCompanyId}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("selectedProjectId", out JsonElement projElem) && projElem.ValueKind == JsonValueKind.Number)
+                        {
+                            if (projElem.TryGetInt32(out int projId))
+                            {
+                                selectedProjectId = projId;
+                                Console.WriteLine($"[DEBUG] Restored selectedProjectId: {selectedProjectId}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("start", out JsonElement startElem) && startElem.ValueKind == JsonValueKind.String)
+                        {
+                            string startStr = startElem.GetString();
+                            if (DateTime.TryParse(startStr, out DateTime savedStart))
+                            {
+                                start = savedStart;
+                                Console.WriteLine($"[DEBUG] Restored start: {start}");
+                            }
+                        }
+                        
+                        if (root.TryGetProperty("end", out JsonElement endElem) && endElem.ValueKind == JsonValueKind.String)
+                        {
+                            string endStr = endElem.GetString();
+                            if (DateTime.TryParse(endStr, out DateTime savedEnd))
+                            {
+                                end = savedEnd;
+                                Console.WriteLine($"[DEBUG] Restored end: {end}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception parseEx)
+                {
+                    Console.WriteLine($"[ERROR] Failed to parse form state JSON: {parseEx.Message}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("[DEBUG] No form state found in sessionStorage");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Error loading form state: {ex.Message}");
+        }
+    }
+
+    private async Task ClearFormState()
+    {
+        try
+        {
+            module ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/storage.js");
+            await module.InvokeVoidAsync("clearFormState", FORM_STATE_KEY);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error clearing form state: {ex.Message}");
+        }
+    }
+
+    private async Task OnStartDateChanged()
+    {
+        await SaveFormState();
+        await GetEntries();
+    }
+
+    private async Task OnEndDateChanged()
+    {
+        await SaveFormState();
+        await GetEntries();
+    }
+
+    private async Task OnCategoryChanged()
+    {
+        await SaveFormState();
+        await GetEntries();
+    }
+
+    private async Task OnCompanyChanged()
+    {
+        await SaveFormState();
+        await GetEntries();
+    }
+
+    private async Task OnProjectChanged()
+    {
+        await SaveFormState();
+        await GetEntries();
+    }
+
+    private async Task OnBillableChanged()
+    {
+        await SaveFormState();
+        await GetEntries();
+    }
+
+    private async Task OnDateChanged()
+    {
+        await SaveFormState();
+    }
+
+    private async Task OnTimeChanged()
+    {
+        await SaveFormState();
+    }
+
+    private async Task OnHoursChanged()
+    {
+        await SaveFormState();
+    }
+
+    private async Task OnCommentChanged()
+    {
+        await SaveFormState();
+    }
+
+    private async Task OnDetailsChanged()
+    {
+        await SaveFormState();
     }
 }
